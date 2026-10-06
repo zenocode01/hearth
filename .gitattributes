@@ -1,0 +1,42 @@
+# 统一行尾：仓库内存 LF，工作区也写 LF，避免跨平台 / 容器构建抖动
+* text=auto eol=lf
+
+# 文本文件（显式声明，便于 diff 与语法高亮）
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.mjs   text eol=lf
+*.cjs   text eol=lf
+*.json  text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+*.rs    text eol=lf
+*.sh    text eol=lf
+*.sql   text eol=lf
+
+# Windows 专用脚本保持 CRLF
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# 二进制：不做行尾转换、不当作文本 diff
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.icns  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.zip   binary
+
+# 锁定/生成文件不参与 diff
+package-lock.json -diff
+pnpm-lock.yaml -diff
+Cargo.lock -diff
