@@ -4,10 +4,18 @@ Thumbs.db
 
 # 依赖与构建产物
 node_modules/
+.next/
 dist/
 build/
 out/
 *.tsbuildinfo
+
+# Next.js 自动生成
+next-env.d.ts
+
+# SQLite 数据（阶段 2 起）
+*.db
+*.db-journal
 
 # 日志与缓存
 *.log
