@@ -4,6 +4,8 @@ import { Button, Flexbox, Text } from '@lobehub/ui';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { ThemeDock } from '@/components/ThemeDock';
+
 /** 首页：入口页，进入聊天。 */
 export default function HomePage() {
   const router = useRouter();
@@ -30,6 +32,7 @@ export default function HomePage() {
           本项目为独立实现，设计参考了 LobeHub；使用 MIT 协议的 @lobehub/ui 与 @lobehub/icons。
         </Text>
       </Flexbox>
+      <ThemeDock />
     </Flexbox>
   );
 }

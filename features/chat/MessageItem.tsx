@@ -8,7 +8,10 @@ interface MessageItemProps {
   message: UIMessage;
 }
 
-/** 渲染一条消息：用户为纯文本气泡，AI 为 Markdown（流式平滑）。 */
+/**
+ * 渲染一条消息：用户为浅色气泡，AI 为无气泡的 Markdown（流式平滑）。
+ * 颜色用 antd 的 CSS 变量（如 --ant-color-fill-secondary），随深浅色自动切换。
+ */
 export const MessageItem = memo(({ message }: MessageItemProps) => {
   const isUser = message.role === 'user';
 
@@ -21,13 +24,10 @@ export const MessageItem = memo(({ message }: MessageItemProps) => {
     >
       <div
         style={{
-          background: isUser
-            ? 'var(--pi-vars-colorPrimary, #1677ff)'
-            : 'var(--pi-vars-colorFillTertiary, rgba(0,0,0,0.04))',
+          background: isUser ? 'var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.06))' : undefined,
           borderRadius: 12,
-          color: isUser ? '#fff' : 'inherit',
           maxWidth: '85%',
-          padding: '10px 14px',
+          padding: isUser ? '10px 14px' : '2px 0',
           whiteSpace: isUser ? 'pre-wrap' : undefined,
           wordBreak: 'break-word',
         }}

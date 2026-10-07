@@ -6,9 +6,8 @@ import { ConfigProvider, ThemeProvider } from '@lobehub/ui';
 import * as m from 'motion/react-m';
 import { useCallback, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 
-import { ThemeSwitcher } from './ThemeSwitcher';
-import { THEME_COOKIE, type ThemeMode } from './theme';
-import {
+import { ThemeControlContext } from './themeContext';
+import { THEME_COOKIE, type ThemeMode } from './theme';import {
   applyInstantly,
   readStoredEffect,
   runThemeTransition,
@@ -82,21 +81,19 @@ export function AppThemeProvider({ children, initialMode = 'auto' }: AppThemePro
   }, []);
 
   return (
-    <ConfigProvider motion={m}>
-      <ThemeProvider
-        appearance={appearance}
-        defaultAppearance={appearance}
-        defaultThemeMode={appearance}
-        theme={{ cssVar: { key: 'pi-vars' } }}
-      >
-        {children}
-        <ThemeSwitcher
-          effect={effect}
-          mode={mode}
-          onEffectChange={handleEffectChange}
-          onModeChange={handleModeChange}
-        />
-      </ThemeProvider>
-    </ConfigProvider>
+    <ThemeControlContext.Provider
+      value={{ effect, mode, setEffect: handleEffectChange, setMode: handleModeChange }}
+    >
+      <ConfigProvider motion={m}>
+        <ThemeProvider
+          appearance={appearance}
+          defaultAppearance={appearance}
+          defaultThemeMode={appearance}
+          theme={{ cssVar: { key: 'pi-vars' } }}
+        >
+          {children}
+        </ThemeProvider>
+      </ConfigProvider>
+    </ThemeControlContext.Provider>
   );
 }

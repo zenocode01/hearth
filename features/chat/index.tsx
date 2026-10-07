@@ -4,11 +4,13 @@ import { useChat } from '@ai-sdk/react';
 import { Button, Text } from '@lobehub/ui';
 import { useEffect, useRef } from 'react';
 
+import { ThemeControls } from '@/components/ThemeControls';
+
 import { ChatComposer } from './ChatComposer';
 import { EmptyState } from './EmptyState';
 import { MessageItem } from './MessageItem';
 
-/** 聊天主视图：消息列表 + 错误条 + 输入框（见 .agents/skills/chat-streaming）。 */
+/** 聊天主视图：顶栏 + 消息列表 + 错误条 + 输入框（见 .agents/skills/chat-streaming）。 */
 export function ChatView() {
   const { messages, sendMessage, status, error, stop, clearError, regenerate } = useChat();
   const busy = status === 'submitted' || status === 'streaming';
@@ -22,6 +24,21 @@ export function ChatView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
+      {/* 顶栏：主题控件在这里（不悬浮、不遮挡内容）。阶段 3 的 Agent 选择器也放这。 */}
+      <div
+        style={{
+          alignItems: 'center',
+          borderBottom: '1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06))',
+          display: 'flex',
+          flexShrink: 0,
+          justifyContent: 'space-between',
+          padding: '8px 16px',
+        }}
+      >
+        <Text style={{ fontSize: 16, fontWeight: 600 }}>pi-web</Text>
+        <ThemeControls />
+      </div>
+
       <div
         ref={scrollRef}
         style={{
@@ -45,9 +62,9 @@ export function ChatView() {
         <div
           style={{
             alignItems: 'center',
-            background: 'rgba(255, 77, 79, 0.12)',
+            background: 'var(--ant-color-error-bg, rgba(255, 77, 79, 0.12))',
             borderRadius: 8,
-            color: '#ff4d4f',
+            color: 'var(--ant-color-error, #ff4d4f)',
             display: 'flex',
             fontSize: 13,
             gap: 12,

@@ -28,7 +28,7 @@ export const ChatComposer = memo(({ busy, onSend, onStop }: ChatComposerProps) =
       gap={8}
       horizontal
       style={{
-        borderTop: '1px solid var(--pi-vars-colorBorderSecondary, rgba(0,0,0,0.06))',
+        borderTop: '1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06))',
         padding: 12,
       }}
     >
