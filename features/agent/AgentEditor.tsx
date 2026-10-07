@@ -305,6 +305,10 @@ export function AgentEditor({ id }: AgentEditorProps) {
             <Text style={{ fontSize: 12 }} type="secondary">
               若 CLI 输出 JSON 事件流（如 pi 的 --mode json），其中的思考过程会自动解析成「思考过程」块。
             </Text>
+            <Text style={{ fontSize: 12 }} type="secondary">
+              命令最前面可写 KEY=value 给这次运行设环境变量（不经过 shell）。例如 opencode
+              与桌面端共用数据目录会报错时：XDG_DATA_HOME=D:\oc-data opencode run {'{{prompt}}'}
+            </Text>
           </Flexbox>
         )}
       </Flexbox>

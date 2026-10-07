@@ -67,14 +67,23 @@ function findOnWindowsPath(file: string): string | null {
   }
 }
 
-/** npm 的 .cmd shim 里会执行 `node <包内脚本> %*`，把那个脚本路径抠出来。 */
-function scriptFromCmdShim(cmdPath: string): string | null {
+/**
+ * npm 的 .cmd shim 里会执行包内的目标程序，把它抠出来：
+ *   "…%dp0%\node_modules\…\cli.js"          → 用 node 跑
+ *   "…%dp0%\node_modules\…\bin\xxx.exe"     → 直接跑 exe
+ */
+function targetFromCmdShim(cmdPath: string): { argsPrefix: string[]; file: string } | null {
   try {
     const content = readFileSync(cmdPath, 'utf8');
-    const match = content.match(/"?%dp0%[\\/]([^"]+?\.(?:c?js|mjs))"?/i);
+    const match = content.match(/"?%dp0%[\\/]([^"]+?\.(?:exe|c?js|mjs))"?/i);
     if (!match) return null;
-    const script = path.join(path.dirname(cmdPath), match[1].replaceAll('\\', path.sep));
-    return existsSync(script) ? script : null;
+
+    const target = path.join(path.dirname(cmdPath), match[1].replaceAll('\\', path.sep));
+    if (!existsSync(target)) return null;
+
+    return target.toLowerCase().endsWith('.exe')
+      ? { argsPrefix: [], file: target }
+      : { argsPrefix: [target], file: process.execPath };
   } catch {
     return null;
   }
@@ -93,8 +102,8 @@ export function resolveCliCommand(file: string, args: string[]): { args: string[
   const lower = resolved.toLowerCase();
 
   if (lower.endsWith('.cmd') || lower.endsWith('.bat')) {
-    const script = scriptFromCmdShim(resolved);
-    if (script) return { args: [script, ...args], file: process.execPath };
+    const target = targetFromCmdShim(resolved);
+    if (target) return { args: [...target.argsPrefix, ...args], file: target.file };
     return { args, file: resolved };
   }
   if (lower.endsWith('.ps1')) {
@@ -106,6 +115,18 @@ export function resolveCliCommand(file: string, args: string[]): { args: string[
   return { args, file: resolved };
 }
 
+/** 支持 `KEY=value` 前缀：等价于只给这次运行设环境变量（不需要 shell）。 */
+function extractEnvPrefix(tokens: string[]): { env: Record<string, string>; rest: string[] } {
+  const env: Record<string, string> = {};
+  let index = 0;
+  while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[index])) {
+    const separator = tokens[index].indexOf('=');
+    env[tokens[index].slice(0, separator)] = tokens[index].slice(separator + 1);
+    index += 1;
+  }
+  return { env, rest: tokens.slice(index) };
+}
+
 export interface CliRunOptions {
   command: string;
   prompt: string;
@@ -113,22 +134,27 @@ export interface CliRunOptions {
   systemPrompt?: string | null;
 }
 
-/** 组装最终的 argv 与 stdin（占位符替换）。 */
+/** 组装最终的 argv、stdin 与环境变量（占位符替换）。 */
 export function buildCliInvocation({ command, prompt, systemPrompt }: CliRunOptions) {
   const persona = systemPrompt?.trim() ?? '';
   let usesPromptPlaceholder = false;
 
-  const args = parseCommandTemplate(command).map((token) => {
+  const substitute = (token: string) => {
     if (token.includes('{{prompt}}')) usesPromptPlaceholder = true;
-    return token
-      .replaceAll('{{prompt}}', prompt)
-      .replaceAll('{{systemPrompt}}', persona);
-  });
+    return token.replaceAll('{{prompt}}', prompt).replaceAll('{{systemPrompt}}', persona);
+  };
 
+  const { env, rest } = extractEnvPrefix(parseCommandTemplate(command));
+  const args = rest.map(substitute);
   if (args.length === 0) throw new Error('CLI 命令为空');
+
+  const resolvedEnv = Object.fromEntries(
+    Object.entries(env).map(([key, value]) => [key, substitute(value)]),
+  );
 
   return {
     args: args.slice(1),
+    env: resolvedEnv,
     file: args[0],
     // 没用 {{prompt}} 占位符 → prompt 从 stdin 传（很多 CLI 支持）
     stdin: usesPromptPlaceholder ? null : prompt,
@@ -139,6 +165,15 @@ export function buildCliInvocation({ command, prompt, systemPrompt }: CliRunOpti
 export interface CliChunk {
   delta: string;
   kind: 'reasoning' | 'text';
+}
+
+/** 去掉 ANSI 转义序列（很多 CLI 报错时会带颜色码，直接展示会变成乱码）。 */
+const ANSI_ESCAPE =
+  // eslint-disable-next-line no-control-regex
+  /[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g;
+
+function stripAnsi(value: string): string {
+  return value.replace(ANSI_ESCAPE, '');
 }
 
 /**
@@ -198,7 +233,7 @@ export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliCh
   const stdin = invocation.stdin;
 
   const child = spawn(file, args, {
-    env: process.env,
+    env: { ...process.env, ...invocation.env },
     shell: false,
     windowsHide: true,
   });
@@ -208,7 +243,7 @@ export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliCh
 
   let stderr = '';
   child.stderr.on('data', (chunk: Buffer) => {
-    stderr += chunk.toString();
+    stderr += stripAnsi(chunk.toString());
   });
 
   if (stdin) {
@@ -256,7 +291,7 @@ export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliCh
 
   function* processChunk(chunk: string): Generator<CliChunk> {
     if (protocol === 'text') {
-      yield { delta: chunk, kind: 'text' };
+      yield { delta: stripAnsi(chunk), kind: 'text' };
       return;
     }
 
