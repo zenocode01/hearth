@@ -60,6 +60,7 @@ pi-web/
 
 - 装好依赖后：`npm run dev` → http://localhost:3000
 - **Next 16 有破坏性变更**：写 Next 相关代码前，先读 `node_modules/next/dist/docs/` 里对应指南（文末 Next 自动生成区块也提醒了这点），不要凭训练记忆写。
+- **构建用 webpack（`--webpack`），不用 Turbopack**：本机 E: 盘创建 junction 报错 `os error 1392`（文件或目录损坏），Turbopack 需要 junction 会构建失败。等磁盘修复（管理员运行 `chkdsk E: /f`）后可去掉 `--webpack` 切回。
 - Git：每个**通过验收的小功能**一个 commit；message 写清改了什么。主干即开发分支。
 - 依赖：只加 `docs/replica/03` §4 清单里的包；新依赖先问用户。
 

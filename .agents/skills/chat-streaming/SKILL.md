@@ -1,40 +1,52 @@
 ---
 name: chat-streaming
-description: 'Use for the chat page, streaming replies (Vercel AI SDK streamText / SSE), markdown rendering, and message data structure. Blueprint L1-1, roadmap phase 1.'
+description: 'Use for the chat page, streaming replies (Vercel AI SDK streamText), markdown rendering, and message data structure. Blueprint L1-1, roadmap phase 1.'
 ---
 
 # 聊天 + 流式回复（L1-1）
 
-第一个就该做的功能：输入框 + 消息列表 + **逐字**渲染。
+核心已落地（见下），真实 key 验收待补。
 
 ## 参考点（学思路，不抄代码）
 
 - `refs/lobe-chat/src/features/Chat/` —— 消息结构、输入框、消息列表的组织方式
 - `refs/lobe-chat/packages/fetch-sse/` —— SSE 收流思想（我们用 Vercel AI SDK 替代）
-- `refs/lobe-chat/.agents/skills/data-fetching-architecture/SKILL.md` —— 数据获取分层思想
+- `refs/lobe-chat/src/components/StreamingMarkdown/` —— 流式 Markdown 的渲染方式
 - `refs/lobe-chat/.agents/skills/ux/SKILL.md` —— 空/加载/错误三态规范
 
-## 简化版做法
+## 已落地（阶段 1）
 
-1. `app/(chat)/page.tsx`：顶部 Agent 名 + 中间消息列表 + 底部输入框（页面薄，逻辑进 `features/chat/`）。
-2. `app/api/chat/route.ts`：Vercel AI SDK `streamText`；model 与 key 来自 `lib/llm/`（见 `model-providers`）。
-3. 前端逐字渲染：优先 AI SDK 的 `useChat`，或自消费 SSE。**禁止整段等待后一次性渲染**。
-4. Markdown：react-markdown + shiki（代码块带复制按钮）。
-5. 消息数据结构（参考 LobeHub messages 表，只留需要的列）：`id / topicId / role / content / createdAt`。
+文件：`lib/llm/`（配置 + provider）、`app/api/chat/route.ts`（流式接口）、`features/chat/`（视图）、`app/chat/page.tsx`（薄页面）。
 
-## 必须有的状态
+- **服务端（AI SDK v7）**：`streamText({ model, messages: await convertToModelMessages(messages) })` →
+  `createUIMessageStreamResponse({ stream: toUIMessageStream({ stream: result.stream, onError: humanizeError }) })`。
+- **客户端（AI SDK v7）**：`useChat()`（默认打 `/api/chat`），消息是 `UIMessage`，内容在 `message.parts`
+  （`part.type === 'text'`）。`sendMessage({ text })`，`status` 取 `submitted/streaming/ready/error`。
+- **Markdown 用 `@lobehub/ui` 的 `Markdown`**：`<Markdown animated variant="chat">{text}</Markdown>`，
+  自带流式平滑、代码块高亮与复制。**不要**再自装 react-markdown/shiki（蓝图里的家用配方在此被 lobe-ui 简化）。
+- **模型配置走 env**：任何 OpenAI 兼容接口（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`），
+  `@ai-sdk/openai-compatible` 的 `createOpenAICompatible(...).chatModel(model)`，provider 不写死。
+- **错误可读（验收项）**：缺配置返回可读文案；`humanizeError` 把 401/403/404/429/网络错误映射成人话。
+- **输入法安全**：Enter 发送、Shift+Enter 换行，拼音组合中（composition）不触发发送。
+- **主题坞在右上角**（`ThemeSwitcher`）：避免与底部输入框重叠。
 
-- 发送中：输入框禁用 + 防重复提交（或停止按钮）
-- 失败：断网 / 错 key 时**可读的错误提示**（验收项，不是可选项）
-- 空会话：首个引导提示语
+## 离线联调（无需真实 key）
+
+```bash
+npm run mock:llm          # 终端 A：本地 mock（OpenAI 兼容 SSE，端口 9123）
+# 终端 B：把 .env.local 切到 mock 三行（见文件内注释），npm run dev
+```
 
 ## 验收（`docs/replica/04` 阶段 1）
 
-- [ ] 问"1+1 等于几"能看到逐字打字效果
-- [ ] Markdown 标题/列表/代码块排版正确，代码有高亮和复制按钮
-- [ ] 断网或写错 key 时有可读错误提示
+- [x] 逐字流式渲染（截图采样：文本长度在 150ms 间隔内递增）
+- [x] Markdown 排版 + 代码高亮（shiki 渲染出 span）
+- [x] 断网 / 错 key / 缺配置有可读错误提示（含"重试"）
+- [ ] 用真实模型跑一遍（待用户填 key）
 
 ## 常见翻车
 
-- 回答一次性出现 → 没走流式接口，检查是否真的用了 `streamText` 并消费了 stream。
-- 刷新后消息还在 → 说明提前接了持久化；那是阶段 2 的活，先确认当前阶段范围。
+- 回答一次性出现 → 没走流式接口，检查 `streamText` 与 `toUIMessageStream` 链路。
+- 中文输入拼音就直接发送 → 未处理 composition 事件（见 `ChatComposer`）。
+- 装 shiki/react-markdown 自己拼 → 先看 `@lobehub/ui` 的 `Markdown` 是否已满足。
+- Turbopack 报 junction 错误 → 见 AGENTS.md，本机需用 `--webpack`。

@@ -24,7 +24,7 @@ interface ThemeSwitcherProps {
   onEffectChange: (effect: ThemeTransitionEffect) => void;
 }
 
-/** 右下角固定的主题坞：模式切换 + 切换动画设置。 */
+/** 右上角固定的主题坞：模式切换 + 切换动画设置。 */
 export function ThemeSwitcher({
   mode,
   onModeChange,
@@ -35,7 +35,18 @@ export function ThemeSwitcher({
     <Flexbox
       align="flex-end"
       gap={8}
-      style={{ bottom: 16, position: 'fixed', right: 16, zIndex: 99 }}
+      style={{
+        backdropFilter: 'blur(8px)',
+        background: 'var(--pi-vars-colorBgElevated, rgba(255, 255, 255, 0.85))',
+        border: '1px solid var(--pi-vars-colorBorderSecondary, rgba(0, 0, 0, 0.08))',
+        borderRadius: 12,
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+        padding: 8,
+        position: 'fixed',
+        right: 16,
+        top: 16,
+        zIndex: 99,
+      }}
     >
       <Segmented
         block={false}

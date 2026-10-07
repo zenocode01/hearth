@@ -4,16 +4,20 @@
   "private": true,
   "description": "LobeHub 功能复刻版（家用配方）——个人 AI 聊天 + Agent 工作台",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "mock:llm": "node scripts/mock-llm.mjs"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.65",
+    "@ai-sdk/react": "^4.0.133",
     "@lobehub/fluent-emoji": "^4",
     "@lobehub/icons": "^5",
     "@lobehub/ui": "^5",
     "@next/swc-win32-x64-msvc": "^16.4.0",
+    "ai": "^7.0.130",
     "antd": "^6",
     "motion": "^12",
     "next": "^16",
