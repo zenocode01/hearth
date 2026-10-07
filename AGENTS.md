@@ -59,6 +59,7 @@ pi-web/
 ## 开发工作流
 
 - 装好依赖后：`npm run dev` → http://localhost:3000
+- **Next 16 有破坏性变更**：写 Next 相关代码前，先读 `node_modules/next/dist/docs/` 里对应指南（文末 Next 自动生成区块也提醒了这点），不要凭训练记忆写。
 - Git：每个**通过验收的小功能**一个 commit；message 写清改了什么。主干即开发分支。
 - 依赖：只加 `docs/replica/03` §4 清单里的包；新依赖先问用户。
 
@@ -88,3 +89,13 @@ pi-web/
 ## 演进路线
 
 阶段 0~5 见 `docs/replica/04`；当前进度由 `project-overview` skill 维护。
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
