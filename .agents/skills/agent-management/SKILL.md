@@ -11,7 +11,9 @@ description: 'Use for the agents table, Agent Builder form, agent list, agent se
 
 - **表**：`agents(id, name, avatar, system_prompt, model, temperature, created_at, updated_at)`；`topics.agent_id`（可空，`ON DELETE SET NULL`——删 Agent 后会话回到默认）。
 - **API**：`GET/POST /api/agents`、`GET/PATCH/DELETE /api/agents/[id]`、`POST /api/agents/test`（**无状态**：直接用表单里的配置试一句，未保存也能测）、`GET /api/models`（从 provider 的 `/models` 拉列表，拉不到就退化成只有"默认"）。
-- **页面**：`/agents` 列表（编辑/删除两段确认）、`/agents/new`、`/agents/[id]`（`features/agent/`）。
+- **页面**：`/agents` 列表（头像+名称/模型/人设摘要，编辑/删除用图标按钮 + Tooltip，删除两段确认）、`/agents/new`、`/agents/[id]`（`features/agent/`）。
+- **编辑页（已打磨）**：`EmojiPicker`（lobe-ui 自带，emoji-mart 数据集，关掉 upload 保持纯 emoji）+ `ColorSwatches`（`primaryColorsSwatches`，注意它是 `string[]`，要 map 成 `{ color }`）+ **顶部预览卡**（改什么立刻看到）+ 分区卡片（基本信息 / 人设 / 模型与参数 / 测试结果）。
+- **头像组件**：`features/agent/AgentAvatar.tsx` = 带底色的圆角方块 + `FluentEmoji`，列表 / 切换器 / 编辑页预览共用同一个组件。
 - **聊天接入**：**Agent 切换器在侧栏顶部**（会话列表上方，与 LobeHub 的 `AgentSidebar/Header/Agent` 一致）：触发器是"头像 + 名字 + 上下箭头"，点开是切换面板（含"管理 Agent"入口）。聊天顶栏只留标题与主题控件。新建会话时带上 `agentId`，已有会话切换 Agent 走 `PATCH /api/topics/[id]`。
 
 ## 关键坑（都踩过）

@@ -22,6 +22,13 @@
       "when": 1791363889927,
       "tag": "0002_add_agents_and_topic_agent",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1791366647042,
+      "tag": "0003_add_agent_background_color",
+      "breakpoints": true
     }
   ]
 }

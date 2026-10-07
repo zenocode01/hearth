@@ -1,6 +1,7 @@
 /** Agent 表单输入的归一化（路由文件不能导出额外函数，故独立成模块）。 */
 export interface AgentInput {
   avatar?: string;
+  backgroundColor?: string;
   model?: string;
   name?: string;
   systemPrompt?: string;
@@ -10,6 +11,7 @@ export interface AgentInput {
 export function normalizeAgentInput(input: AgentInput) {
   return {
     avatar: input.avatar?.trim() || '😀',
+    backgroundColor: input.backgroundColor?.trim() || null,
     model: input.model?.trim() || null,
     name: (input.name ?? '').trim().slice(0, 40) || '未命名 Agent',
     systemPrompt: input.systemPrompt?.trim() || null,
@@ -27,6 +29,7 @@ export function normalizeAgentInput(input: AgentInput) {
 export function normalizeAgentPatch(input: AgentInput) {
   const patch: {
     avatar?: string;
+    backgroundColor?: string | null;
     model?: string | null;
     name?: string;
     systemPrompt?: string | null;
@@ -34,6 +37,9 @@ export function normalizeAgentPatch(input: AgentInput) {
   } = {};
 
   if (input.avatar !== undefined) patch.avatar = input.avatar?.trim() || '😀';
+  if (input.backgroundColor !== undefined) {
+    patch.backgroundColor = input.backgroundColor?.trim() || null;
+  }
   if (input.model !== undefined) patch.model = input.model?.trim() || null;
   if (input.name !== undefined) patch.name = (input.name ?? '').trim().slice(0, 40) || '未命名 Agent';
   if (input.systemPrompt !== undefined) patch.systemPrompt = input.systemPrompt?.trim() || null;

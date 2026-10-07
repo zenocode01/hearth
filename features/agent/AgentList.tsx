@@ -1,10 +1,13 @@
 'use client';
 
-import { Button, Center, Flexbox, FluentEmoji, Text } from '@lobehub/ui';
+import { Button, Center, Flexbox, FluentEmoji, Text, Tooltip } from '@lobehub/ui';
+import { MessageSquare, Plus, SquarePen, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { Agent } from '@/lib/db/schema';
+
+import { AgentAvatar } from './AgentAvatar';
 
 /** Agent 列表页：查看 / 编辑 / 删除。 */
 export function AgentList() {
@@ -37,8 +40,10 @@ export function AgentList() {
       <Flexbox align="center" horizontal justify="space-between">
         <Text style={{ fontSize: 20, fontWeight: 600 }}>Agent 管理</Text>
         <Flexbox gap={8} horizontal>
-          <Button onClick={() => router.push('/chat')}>回到聊天</Button>
-          <Button type="primary" onClick={() => router.push('/agents/new')}>
+          <Button icon={<MessageSquare size={16} />} onClick={() => router.push('/chat')}>
+            回到聊天
+          </Button>
+          <Button icon={<Plus size={16} />} type="primary" onClick={() => router.push('/agents/new')}>
             新建 Agent
           </Button>
         </Flexbox>
@@ -66,7 +71,7 @@ export function AgentList() {
                 padding: 12,
               }}
             >
-              <FluentEmoji emoji={agent.avatar ?? '😀'} size={32} />
+              <AgentAvatar avatar={agent.avatar} background={agent.backgroundColor} size={40} />
               <Flexbox flex={1} gap={2} style={{ minWidth: 0 }}>
                 <Text style={{ fontWeight: 600 }}>{agent.name}</Text>
                 <Text style={{ fontSize: 12 }} type="secondary">
@@ -87,13 +92,22 @@ export function AgentList() {
                   </Button>
                 </Flexbox>
               ) : (
-                <Flexbox gap={8} horizontal>
-                  <Button size="small" onClick={() => router.push(`/agents/${agent.id}`)}>
-                    编辑
-                  </Button>
-                  <Button size="small" onClick={() => setConfirmId(agent.id)}>
-                    删除
-                  </Button>
+                <Flexbox gap={4} horizontal>
+                  <Tooltip title="编辑">
+                    <Button
+                      icon={<SquarePen size={16} />}
+                      type="text"
+                      onClick={() => router.push(`/agents/${agent.id}`)}
+                    />
+                  </Tooltip>
+                  <Tooltip title="删除">
+                    <Button
+                      danger
+                      icon={<Trash2 size={16} />}
+                      type="text"
+                      onClick={() => setConfirmId(agent.id)}
+                    />
+                  </Tooltip>
                 </Flexbox>
               )}
             </Flexbox>

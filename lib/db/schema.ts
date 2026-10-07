@@ -6,6 +6,8 @@ export const agents = sqliteTable('agents', {
   name: text('name').notNull(),
   /** 头像：一个 emoji（用 FluentEmoji 渲染） */
   avatar: text('avatar'),
+  /** 头像背景色（可空，渲染成带底色的小方块） */
+  backgroundColor: text('background_color'),
   /** 人设（系统提示词） */
   systemPrompt: text('system_prompt'),
   /** 模型名；空 = 用 .env.local 里的默认模型 */

@@ -1,48 +1,66 @@
 'use client';
 
-import { Block, FluentEmoji, Icon, Popover, Text } from '@lobehub/ui';
+import { Block, Icon, Popover, Text } from '@lobehub/ui';
 import { Check, ChevronsUpDown, Settings } from 'lucide-react';
 import { memo, useState, type ReactNode } from 'react';
 
 import type { Agent } from '@/lib/db/schema';
 
+import { AgentAvatar } from '../agent/AgentAvatar';
+
 interface SwitcherRowProps {
   active?: boolean;
   avatar: ReactNode | string;
+  /** 与 avatar 搭配的底色（emoji 头像时用） */
+  background?: string | null;
   onClick: () => void;
   subtitle?: string;
   title: string;
 }
 
-const SwitcherRow = memo(({ title, subtitle, avatar, active, onClick }: SwitcherRowProps) => (
-  <div
-    onClick={onClick}
-    style={{
-      alignItems: 'center',
-      background: active ? 'var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.06))' : undefined,
-      borderRadius: 8,
-      cursor: 'pointer',
-      display: 'flex',
-      gap: 8,
-      padding: '6px 8px',
-    }}
-  >
-    <span style={{ alignItems: 'center', display: 'inline-flex', flexShrink: 0, width: 22 }}>
-      {typeof avatar === 'string' ? <FluentEmoji emoji={avatar} size={20} /> : avatar}
-    </span>
-    <span style={{ flex: 1, minWidth: 0 }}>
-      <Text ellipsis style={{ fontSize: 13 }}>
-        {title}
-      </Text>
-      {subtitle && (
-        <div style={{ fontSize: 11, opacity: 0.55, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {subtitle}
-        </div>
-      )}
-    </span>
-    {active && <Icon icon={Check} size={14} />}
-  </div>
-));
+const SwitcherRow = memo(
+  ({ title, subtitle, avatar, background, active, onClick }: SwitcherRowProps) => (
+    <div
+      onClick={onClick}
+      style={{
+        alignItems: 'center',
+        background: active ? 'var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.06))' : undefined,
+        borderRadius: 8,
+        cursor: 'pointer',
+        display: 'flex',
+        gap: 8,
+        padding: '6px 8px',
+      }}
+    >
+      <span style={{ alignItems: 'center', display: 'inline-flex', flexShrink: 0, width: 24 }}>
+        {typeof avatar === 'string' ? (
+          <AgentAvatar avatar={avatar} background={background} size={24} />
+        ) : (
+          avatar
+        )}
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <Text ellipsis style={{ fontSize: 13 }}>
+          {title}
+        </Text>
+        {subtitle && (
+          <div
+            style={{
+              fontSize: 11,
+              opacity: 0.55,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {subtitle}
+          </div>
+        )}
+      </span>
+      {active && <Icon icon={Check} size={14} />}
+    </div>
+  ),
+);
 
 SwitcherRow.displayName = 'SwitcherRow';
 
@@ -86,6 +104,7 @@ export const AgentSwitcher = memo(
               <SwitcherRow
                 active={agent.id === activeAgentId}
                 avatar={agent.avatar ?? '😀'}
+                background={agent.backgroundColor}
                 key={agent.id}
                 subtitle={agent.model ?? '默认模型'}
                 title={agent.name}
@@ -113,7 +132,7 @@ export const AgentSwitcher = memo(
         onOpenChange={setOpen}
       >
         <Block align="center" clickable gap={8} horizontal padding={6} variant="borderless">
-          <FluentEmoji emoji={avatar} size={22} />
+          <AgentAvatar avatar={avatar} background={current?.backgroundColor} size={24} />
           <Text ellipsis style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>
             {label}
           </Text>

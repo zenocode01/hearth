@@ -1,26 +1,52 @@
 'use client';
 
-import { Button, Flexbox, FluentEmoji, Input, Select, Text, TextArea } from '@lobehub/ui';
+import {
+  Button,
+  ColorSwatches,
+  EmojiPicker,
+  Flexbox,
+  Input,
+  Select,
+  Text,
+  TextArea,
+  primaryColorsSwatches,
+} from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
 import { Slider } from 'antd';
+import { ArrowLeft, Check, FlaskConical } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import type { Agent } from '@/lib/db/schema';
 
-const AVATAR_PRESETS = ['😀', '🧑‍💻', '🦉', '🎭', '🧠', '🐱', '🤖', '✍️'];
+import { AgentAvatar } from './AgentAvatar';
 
 interface AgentEditorProps {
   /** 'new' 表示新建 */
   id: string;
 }
 
-/** Agent 编辑页：头像 / 名称 / 人设 / 模型 / 温度 + 测试。 */
+const cardStyle = {
+  background: 'var(--ant-color-bg-container, #fff)',
+  border: '1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.08))',
+  borderRadius: 12,
+  padding: 16,
+} as const;
+
+const Field = ({ children, label }: { children: ReactNode; label: string }) => (
+  <Flexbox gap={8}>
+    <Text style={{ fontSize: 12, opacity: 0.6 }}>{label}</Text>
+    {children}
+  </Flexbox>
+);
+
+/** Agent 编辑页：预览 + 基本信息（头像/底色/名称）+ 人设 + 模型与参数 + 测试。 */
 export function AgentEditor({ id }: AgentEditorProps) {
   const isNew = id === 'new';
   const router = useRouter();
 
   const [avatar, setAvatar] = useState('😀');
+  const [backgroundColor, setBackgroundColor] = useState('');
   const [name, setName] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [model, setModel] = useState('');
@@ -39,6 +65,7 @@ export function AgentEditor({ id }: AgentEditorProps) {
         const agent = data.agent;
         if (!agent) return;
         setAvatar(agent.avatar ?? '😀');
+        setBackgroundColor(agent.backgroundColor ?? '');
         setName(agent.name);
         setSystemPrompt(agent.systemPrompt ?? '');
         setModel(agent.model ?? '');
@@ -56,8 +83,8 @@ export function AgentEditor({ id }: AgentEditorProps) {
   }, []);
 
   const payload = useCallback(
-    () => ({ avatar, model, name, systemPrompt, temperature }),
-    [avatar, model, name, systemPrompt, temperature],
+    () => ({ avatar, backgroundColor, model, name, systemPrompt, temperature }),
+    [avatar, backgroundColor, model, name, systemPrompt, temperature],
   );
 
   const save = useCallback(async () => {
@@ -97,108 +124,134 @@ export function AgentEditor({ id }: AgentEditorProps) {
   }, [payload]);
 
   return (
-    <Flexbox gap={16} style={{ margin: '0 auto', maxWidth: 720, padding: 24, width: '100%' }}>
+    <Flexbox gap={16} style={{ margin: '0 auto', maxWidth: 760, padding: 24, width: '100%' }}>
+      {/* 顶栏 */}
       <Flexbox align="center" horizontal justify="space-between">
-        <Text style={{ fontSize: 20, fontWeight: 600 }}>{isNew ? '新建 Agent' : '编辑 Agent'}</Text>
-        <Button onClick={() => router.push('/agents')}>返回列表</Button>
+        <Flexbox align="center" gap={4} horizontal>
+          <Button icon={<ArrowLeft size={16} />} type="text" onClick={() => router.push('/agents')} />
+          <Text style={{ fontSize: 18, fontWeight: 600 }}>{isNew ? '新建 Agent' : '编辑 Agent'}</Text>
+        </Flexbox>
+        <Flexbox gap={8} horizontal>
+          <Button icon={<FlaskConical size={16} />} loading={testing} onClick={() => void test()}>
+            测试
+          </Button>
+          <Button icon={<Check size={16} />} loading={saving} type="primary" onClick={() => void save()}>
+            保存
+          </Button>
+        </Flexbox>
       </Flexbox>
 
-      <Flexbox gap={8}>
-        <Text style={{ fontSize: 13 }} type="secondary">
-          头像
-        </Text>
-        <Flexbox align="center" gap={8} horizontal>
-          <FluentEmoji emoji={avatar} size={32} />
-          <Input
-            style={{ width: 180 }}
-            value={avatar}
-            onChange={(event) => setAvatar(event.target.value)}
-          />
-          <Flexbox gap={4} horizontal>
-            {AVATAR_PRESETS.map((preset) => (
-              <Button key={preset} size="small" type="text" onClick={() => setAvatar(preset)}>
-                {preset}
-              </Button>
-            ))}
+      {/* 预览：改什么立刻在这里看到 */}
+      <Flexbox align="center" gap={14} horizontal style={cardStyle}>
+        <AgentAvatar avatar={avatar} background={backgroundColor} size={56} />
+        <Flexbox gap={2} style={{ minWidth: 0 }}>
+          <Text style={{ fontSize: 16, fontWeight: 600 }}>{name || '未命名 Agent'}</Text>
+          <Text style={{ fontSize: 12 }} type="secondary">
+            {model || '默认模型'} · 温度 {temperature.toFixed(1)}
+          </Text>
+          <Text ellipsis style={{ fontSize: 12 }} type="secondary">
+            {systemPrompt || '（未设置人设）'}
+          </Text>
+        </Flexbox>
+      </Flexbox>
+
+      {/* 基本信息 */}
+      <Flexbox gap={16} style={cardStyle}>
+        <Text style={{ fontSize: 13, fontWeight: 600 }}>基本信息</Text>
+        <Flexbox align="flex-start" gap={16} horizontal>
+          <Field label="头像">
+            <EmojiPicker
+              allowUpload={false}
+              shape="square"
+              size={48}
+              value={avatar}
+              onChange={(emoji) => setAvatar(emoji)}
+            />
+          </Field>
+          <Flexbox flex={1} gap={14}>
+            <Field label="名称">
+              <Input
+                placeholder="例如：资深后端工程师"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </Field>
+            <Field label="头像底色">
+              <ColorSwatches
+                colors={primaryColorsSwatches.map((color) => ({ color }))}
+                size={18}
+                value={backgroundColor || undefined}
+                onChange={(color) => setBackgroundColor(color ?? '')}
+              />
+            </Field>
           </Flexbox>
         </Flexbox>
       </Flexbox>
 
-      <Flexbox gap={8}>
-        <Text style={{ fontSize: 13 }} type="secondary">
-          名称
-        </Text>
-        <Input
-          placeholder="例如：资深后端工程师"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-      </Flexbox>
-
-      <Flexbox gap={8}>
-        <Text style={{ fontSize: 13 }} type="secondary">
-          人设（系统提示词）
-        </Text>
+      {/* 人设 */}
+      <Flexbox gap={10} style={cardStyle}>
+        <Flexbox gap={2}>
+          <Text style={{ fontSize: 13, fontWeight: 600 }}>人设（系统提示词）</Text>
+          <Text style={{ fontSize: 12 }} type="secondary">
+            这段文字会在每次对话时作为系统指令发给模型——决定它的身份、语气与回答方式。
+          </Text>
+        </Flexbox>
         <TextArea
-          autoSize={{ maxRows: 12, minRows: 5 }}
-          placeholder="例如：你是一位资深后端工程师，回答简洁、先给结论，再给必要的代码示例。"
+          autoSize={{ maxRows: 14, minRows: 6 }}
+          placeholder="例如：你是一位资深后端工程师。回答要求：先给结论，再列不超过 3 个要点，语气专业克制，不使用任何语气词和玩笑。"
           value={systemPrompt}
           onChange={(event) => setSystemPrompt(event.target.value)}
         />
       </Flexbox>
 
-      <Flexbox align="center" gap={12} horizontal>
-        <Flexbox flex={1} gap={8}>
-          <Text style={{ fontSize: 13 }} type="secondary">
-            模型
-          </Text>
-          <Select
-            options={[
-              { label: '默认（.env.local 里的模型）', value: '' },
-              ...models.map((item) => ({ label: item, value: item })),
-            ]}
-            value={model}
-            onChange={(value) => setModel(value as string)}
-          />
-        </Flexbox>
-
-        <Flexbox flex={1} gap={8}>
-          <Text style={{ fontSize: 13 }} type="secondary">
-            温度：{temperature.toFixed(1)}
-          </Text>
-          <Slider
-            max={2}
-            min={0}
-            step={0.1}
-            value={temperature}
-            onChange={(value) => setTemperature(value as number)}
-          />
+      {/* 模型与参数 */}
+      <Flexbox gap={16} style={cardStyle}>
+        <Text style={{ fontSize: 13, fontWeight: 600 }}>模型与参数</Text>
+        <Flexbox align="flex-start" gap={24} horizontal>
+          <Flexbox flex={1}>
+            <Field label="模型">
+              <Select
+                options={[
+                  { label: '默认（.env.local 里的模型）', value: '' },
+                  ...models.map((item) => ({ label: item, value: item })),
+                ]}
+                value={model}
+                onChange={(value) => setModel(value as string)}
+              />
+            </Field>
+          </Flexbox>
+          <Flexbox flex={1}>
+            <Field label={`温度：${temperature.toFixed(1)}`}>
+              <Slider
+                max={2}
+                min={0}
+                step={0.1}
+                value={temperature}
+                onChange={(value) => setTemperature(value as number)}
+              />
+            </Field>
+          </Flexbox>
         </Flexbox>
       </Flexbox>
 
+      {/* 测试结果 */}
       {testResult && (
-        <div
-          style={{
-            background: 'var(--ant-color-fill-tertiary, rgba(0,0,0,0.03))',
-            borderRadius: 8,
-            fontSize: 13,
-            lineHeight: 1.7,
-            padding: 12,
-            whiteSpace: 'pre-wrap',
-          }}
-        >
-          {testResult}
-        </div>
+        <Flexbox gap={8} style={cardStyle}>
+          <Text style={{ fontSize: 13, fontWeight: 600 }}>测试结果</Text>
+          <div
+            style={{
+              background: 'var(--ant-color-fill-tertiary, rgba(0, 0, 0, 0.03))',
+              borderRadius: 8,
+              fontSize: 13,
+              lineHeight: 1.7,
+              padding: 12,
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {testResult}
+          </div>
+        </Flexbox>
       )}
-
-      <Flexbox gap={8} horizontal>
-        <Button loading={saving} type="primary" onClick={() => void save()}>
-          保存
-        </Button>
-        <Button loading={testing} onClick={() => void test()}>
-          测试（问一句固定问题）
-        </Button>
-      </Flexbox>
     </Flexbox>
   );
 }
