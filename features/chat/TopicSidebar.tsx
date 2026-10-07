@@ -161,7 +161,7 @@ export const TopicSidebar = memo(
       <Button block icon={<Icon icon={MessageSquarePlus} size={16} />} onClick={onCreate}>
         新建对话
       </Button>
-      <div className="pi-scroll" style={{ display: 'flex', flex: 1, flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+      <div className="hearth-scroll" style={{ display: 'flex', flex: 1, flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
         {topicsLoading ? (
           <Delayed>
             <ListSkeleton rows={5} size="small" />

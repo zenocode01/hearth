@@ -6,7 +6,9 @@ import { THEME_TRANSITION_EASE, THEME_TRANSITION_MS } from './theme';
 export type ThemeTransitionEffect = 'fade' | 'circle' | 'none';
 
 /** 效果偏好存 localStorage（纯客户端行为，无需 SSR，故不用 cookie）。 */
-export const THEME_EFFECT_STORAGE_KEY = 'pi-theme-effect';
+export const THEME_EFFECT_STORAGE_KEY = 'hearth-theme-effect';
+/** 旧项目名时期的 key：读取时兼容一次，用户偏好不丢 */
+const LEGACY_THEME_EFFECT_STORAGE_KEY = 'pi-theme-effect';
 
 const CIRCLE_DURATION_MS = 520;
 
@@ -31,7 +33,10 @@ if (typeof window !== 'undefined') {
 
 export function readStoredEffect(): ThemeTransitionEffect {
   try {
-    const stored = localStorage.getItem(THEME_EFFECT_STORAGE_KEY);
+    // 新 key 优先；没有则回落到旧 key（改名迁移，用户偏好不丢）
+    const stored =
+      localStorage.getItem(THEME_EFFECT_STORAGE_KEY) ??
+      localStorage.getItem(LEGACY_THEME_EFFECT_STORAGE_KEY);
     return stored === 'fade' || stored === 'circle' || stored === 'none' ? stored : 'circle';
   } catch {
     return 'circle';

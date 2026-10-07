@@ -1,8 +1,8 @@
 {
-  "name": "pi-web",
+  "name": "hearth",
   "version": "0.1.0",
   "private": true,
-  "description": "LobeHub 功能复刻版（家用配方）——个人 AI 聊天 + Agent 工作台",
+  "description": "个人 AI 聊天 + Agent 工作台（家用配方，设计参考 LobeHub）",
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",

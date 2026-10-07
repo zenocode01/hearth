@@ -1,6 +1,6 @@
 ---
 name: vibe-coding-discipline
-description: 'Use for how to work in this project: task sizing, manual verification, commit cadence, and how to prompt the AI assistant. The working rhythm of pi-web.'
+description: 'Use for how to work in this project: task sizing, manual verification, commit cadence, and how to prompt the AI assistant. The working rhythm of Hearth.'
 user-invocable: true
 ---
 

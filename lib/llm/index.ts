@@ -21,7 +21,7 @@ export function createChatModel(modelOverride?: string | null): LanguageModel {
 
   const provider = createOpenAICompatible({
     baseURL: result.config.baseURL,
-    name: 'pi-llm',
+    name: 'hearth-llm',
     apiKey: result.config.apiKey,
   });
 

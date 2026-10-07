@@ -46,7 +46,7 @@ const CLI_PRESETS = [
     Icon: OpenCode,
     iconKey: 'opencode',
     label: 'OpenCode',
-    value: 'XDG_DATA_HOME=%LOCALAPPDATA%\\pi-web opencode run "{{prompt}}"',
+    value: 'XDG_DATA_HOME=%LOCALAPPDATA%\\hearth opencode run "{{prompt}}"',
   },
   {
     Icon: ClaudeCode,

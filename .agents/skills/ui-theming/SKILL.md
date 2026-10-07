@@ -25,11 +25,11 @@ description: 'Use for theming with @lobehub/ui tokens, dark/light mode, antd-sty
 
 文件：`components/AppThemeRoot.tsx`（客户端壳）、`components/AppThemeProvider.tsx`（装配 + 切换动画）、`components/theme.ts`（常量）、`app/layout.tsx`（服务端读 cookie）、`app/globals.css`（首屏兜底 + View Transitions 样式）。
 
-- **初始主题走 cookie**：`app/layout.tsx` 服务端读 `pi-theme` cookie 并渲染到 `<html data-theme>`。服务端与首帧一致 → 无水合错配、无白闪。（因此 `/` 是动态渲染，正常。）
+- **初始主题走 cookie**：`app/layout.tsx` 服务端读 `hearth-theme` cookie 并渲染到 `<html data-theme>`。服务端与首帧一致 → 无水合错配、无白闪。（因此 `/` 是动态渲染，正常。）
 - **主题壳客户端渲染**：`AppThemeRoot` 用 `dynamic(..., { ssr: false })`。原因：antd-style/emotion 在 Next App Router 下服务端与客户端样式注入不一致，直接 SSR 会 "Hydration failed"。首屏底色由 `globals.css` + `<html data-theme>` 兜底。
-- **切换动画可配置**：右下角"主题坞"（`ThemeSwitcher`）除模式外，还有"切换动画"选项：`fade`（整页交叉淡入）/ `circle`（从点击位置圆形扩散）/ `none`（瞬时）。逻辑在 `components/themeTransition.ts`：`runThemeTransition(update, effect)` 用 `document.startViewTransition(() => flushSync(update))`，`fade` 用 `::view-transition-old/new(root)` 的 `opacity`，`circle` 用 `::view-transition-new(root)` 的 `clip-path`（圆心取最近一次 pointerdown）。不支持 View Transitions 时统一降级为"颜色过渡"；`prefers-reduced-motion` 时瞬时切换。效果偏好存 localStorage（`pi-theme-effect`，纯客户端行为）。
+- **切换动画可配置**：右下角"主题坞"（`ThemeSwitcher`）除模式外，还有"切换动画"选项：`fade`（整页交叉淡入）/ `circle`（从点击位置圆形扩散）/ `none`（瞬时）。逻辑在 `components/themeTransition.ts`：`runThemeTransition(update, effect)` 用 `document.startViewTransition(() => flushSync(update))`，`fade` 用 `::view-transition-old/new(root)` 的 `opacity`，`circle` 用 `::view-transition-new(root)` 的 `clip-path`（圆心取最近一次 pointerdown）。不支持 View Transitions 时统一降级为"颜色过渡"；`prefers-reduced-motion` 时瞬时切换。效果偏好存 localStorage（`hearth-theme-effect`，纯客户端行为）。
 - **切换时务必处理 CSS transition**：body 背景是瞬切（0s）、antd 组件默认 `transition: all 0.2s`，不同步 = 错位闪烁。用 View Transitions 时给真实 DOM 注入 `transition:none!important`，窗口需覆盖 antd-style 重新生成样式的 ~100ms（当前取 `CIRCLE_DURATION_MS + 600` ms），动画交给快照。
-- **自定义样式必须用 `--ant-color-*`**：`theme={{ cssVar: { key: 'pi-vars' } }}` 实际**未生效**，页面里生成的是 antd 默认前缀的 kebab-case 变量，如 `--ant-color-bg-elevated`、`--ant-color-fill-secondary`、`--ant-color-border-secondary`、`--ant-color-error`。写 `var(--pi-vars-*)` 会永远走兜底值（深色下就会"发白"）。验证方法：`getComputedStyle(el).getPropertyValue('--ant-color-bg-elevated')`。
+- **自定义样式必须用 `--ant-color-*`**：`theme={{ cssVar: { key: 'hearth-vars' } }}` 实际**未生效**，页面里生成的是 antd 默认前缀的 kebab-case 变量，如 `--ant-color-bg-elevated`、`--ant-color-fill-secondary`、`--ant-color-border-secondary`、`--ant-color-error`。写 `var(--hearth-vars-*)` 会永远走兜底值（深色下就会"发白"）。验证方法：`getComputedStyle(el).getPropertyValue('--ant-color-bg-elevated')`。
 - **主题控件不悬浮**：`ThemeControls` 是纯控件，聊天页放进顶栏（`ChatView` 的 header），只有无顶栏的页面才用悬浮坞 `ThemeDock`。状态经 `components/themeContext.ts` 共享——悬浮在内容之上一定会遮挡滚动内容。
 
 ## 三态纪律（每个页面）
@@ -45,7 +45,7 @@ description: 'Use for theming with @lobehub/ui tokens, dark/light mode, antd-sty
 - **骨架要用新 API**：`@lobehub/ui/base-ui` 的 `Skeleton / SkeletonAvatar / SkeletonText`（`<Skeleton animated height radius width />`）。旧的 `@lobehub/ui` 的 `Skeleton.Block` 已标 **deprecated**（是 antd-style 的 Block 包装）。
 - **骨架形状对齐真实布局**：`components/ListSkeleton.tsx`（头像 + 两行）、`features/chat/MessageSkeleton.tsx`（用户气泡 + 助手多行）、`features/agent/AgentEditorSkeleton.tsx`（标题 + 预览卡 + 表单卡）。给骨架元素加 `data-testid`（如 `list-skeleton`），验证时好抓（LobeHub 也这么做）。
 - **刷新要静默**：`refreshTopics({ silent: true })` 这种约定——发送消息/改名/删除后的刷新不闪骨架、失败也不把已有列表换成错误页；只有首次加载显示三态。
-- **首屏（客户端渲染项目的白屏问题）**：页面全部在 `AppThemeRoot`（`dynamic ssr:false`）里 → SSR 输出没有页面内容。解法：`components/BootSplash.tsx` 由 layout **服务端渲染**（HTML 里就能看到"正在启动…"），`AppThemeProvider` 挂载后派发 `pi-app-ready` 事件隐藏它（React state 驱动，不手工动 DOM）；颜色直接在 globals.css 按 `data-theme` 写（那时还没有 antd 变量）。
+- **首屏（客户端渲染项目的白屏问题）**：页面全部在 `AppThemeRoot`（`dynamic ssr:false`）里 → SSR 输出没有页面内容。解法：`components/BootSplash.tsx` 由 layout **服务端渲染**（HTML 里就能看到"正在启动…"），`AppThemeProvider` 挂载后派发 `hearth-app-ready` 事件隐藏它（React state 驱动，不手工动 DOM）；颜色直接在 globals.css 按 `data-theme` 写（那时还没有 antd 变量）。
 - **路由级 loading**：`app/*/loading.tsx` 复用上面的骨架组件（同形状，避免二次闪烁）。
 - **预取**：`router.prefetch()` + 按钮 `onMouseEnter` 预取；**只在生产生效**（Next 文档 prefetching.md："Automatic prefetching runs only in production"），dev 里看不到预取请求是正常的。
 - **包导入优化**：`next.config.ts` 的 `experimental.optimizePackageImports: ['@lobehub/icons', '@lobehub/ui']`（lucide-react/antd 已在默认清单）。**改 next.config 会触发 dev server 自动重启**，且该优化重启后才生效。

@@ -385,14 +385,14 @@ export function ChatView() {
             padding: '8px 16px',
           }}
         >
-          <Text style={{ fontSize: 16, fontWeight: 600 }}>pi-web</Text>
+          <Text style={{ fontSize: 16, fontWeight: 600 }}>Hearth</Text>
           <ThemeControls />
         </div>
 
         {/* 消息区：relative 容器承载"回到最新"按钮 */}
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <div
-            className="pi-scroll"
+            className="hearth-scroll"
             ref={scrollRef}
             style={{
               display: 'flex',
@@ -432,7 +432,7 @@ export function ChatView() {
             )}
             {waitingFirstToken && (
               <span
-                className="pi-thinking"
+                className="hearth-thinking"
                 style={{
                   alignItems: 'center',
                   color: 'var(--ant-color-text-secondary, rgba(0, 0, 0, 0.45))',

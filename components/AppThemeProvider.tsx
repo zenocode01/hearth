@@ -49,7 +49,7 @@ export function AppThemeProvider({ children, initialMode = 'auto' }: AppThemePro
 
   // 应用壳挂载完成 → 隐藏首屏启动占位（BootSplash）
   useEffect(() => {
-    (window as Window & { __PI_APP_READY__?: boolean }).__PI_APP_READY__ = true;
+    (window as Window & { __HEARTH_APP_READY__?: boolean }).__HEARTH_APP_READY__ = true;
     window.dispatchEvent(new Event(APP_READY_EVENT));
   }, []);
 
@@ -97,7 +97,7 @@ export function AppThemeProvider({ children, initialMode = 'auto' }: AppThemePro
           appearance={appearance}
           defaultAppearance={appearance}
           defaultThemeMode={appearance}
-          theme={{ cssVar: { key: 'pi-vars' } }}
+          theme={{ cssVar: { key: 'hearth-vars' } }}
         >
           {children}
           <ToastHost />

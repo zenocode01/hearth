@@ -39,7 +39,7 @@ export const MessageItem = memo(({ message, startedAt, busy, onAction }: Message
 
   return (
     <div
-      className="pi-msg"
+      className="hearth-msg"
       style={{
         alignItems: isUser ? 'flex-end' : 'flex-start',
         display: 'flex',
@@ -79,7 +79,7 @@ export const MessageItem = memo(({ message, startedAt, busy, onAction }: Message
       </div>
 
       {onAction && (
-        <div className="pi-msg-actions">
+        <div className="hearth-msg-actions">
           <MessageActions
             busy={busy}
             role={isUser ? 'user' : 'assistant'}

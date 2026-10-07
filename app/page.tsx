@@ -25,8 +25,8 @@ export default function HomePage() {
     <Flexbox align="center" justify="center" style={{ minHeight: '100dvh', padding: 24 }}>
       <Flexbox gap={24} style={{ width: '100%', maxWidth: 520 }}>
         <Flexbox align="center" gap={12}>
-          <h1 style={{ fontSize: 48, fontWeight: 700, margin: 0 }}>pi-web</h1>
-          <Text type="secondary">LobeHub 功能复刻版 · 家用配方（Next.js + @lobehub/ui）</Text>
+          <h1 style={{ fontSize: 48, fontWeight: 700, margin: 0 }}>Hearth</h1>
+          <Text type="secondary">个人 AI 聊天与 Agent 工作台 · 家用配方（Next.js + @lobehub/ui）</Text>
         </Flexbox>
 
         <Button

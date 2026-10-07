@@ -32,7 +32,7 @@ description: 'Use for the chat page, streaming replies (Vercel AI SDK streamText
 
 ## 滚动体验（已落地）
 
-- **滚动条**：消息容器加 `.pi-scroll` 类（`app/globals.css`）——`scrollbar-width: thin` + `::-webkit-scrollbar` 规则，用 `--ant-color-fill` 跟随主题（Windows 默认滚动条又粗又不随主题）。
+- **滚动条**：消息容器加 `.hearth-scroll` 类（`app/globals.css`）——`scrollbar-width: thin` + `::-webkit-scrollbar` 规则，用 `--ant-color-fill` 跟随主题（Windows 默认滚动条又粗又不随主题）。
 - **回到最新按钮**：`features/chat/BackBottom.tsx`，绝对定位在消息区右下（不随滚动移动），仅 `!atBottom` 时淡入可点。
 - **自动跟随策略（重要）**：只有用户**本来就在底部**（距底 < 32px）时才跟随新内容；上翻阅读时绝不强行拽回，改为亮出"回到最新"按钮。自己发消息时则强制回到底部。
 - 用 `atBottomRef` 记录位置、`useEffect` 只依赖 `messages`：否则平滑滚动产生的 scroll 事件会触发 effect 反过来打断滚动。

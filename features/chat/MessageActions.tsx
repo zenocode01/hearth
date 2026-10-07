@@ -13,7 +13,7 @@ interface MessageActionsProps {
   role: 'assistant' | 'user';
 }
 
-/** 消息操作栏（参考 refs 的 MessageActionBar，取常用动作）。悬停显示，见 globals.css 的 .pi-msg。 */
+/** 消息操作栏（参考 refs 的 MessageActionBar，取常用动作）。悬停显示，见 globals.css 的 .hearth-msg。 */
 export const MessageActions = memo(({ role, busy, onAction }: MessageActionsProps) => {
   const items = useMemo(() => {
     const list: ActionIconGroupItemType[] = [

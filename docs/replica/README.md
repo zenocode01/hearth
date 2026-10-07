@@ -28,10 +28,10 @@
 ## 你现在手上有什么
 
 ```
-E:/pi-web/
+E:/Hearth/
 ├── refs/lobe-chat/     # LobeHub 完整源码（参考书，随时可以让 AI 查它怎么写）
 ├── refs/lobe-icons/    # lobe-icons 图标库源码（MIT）
 └── docs/replica/       # 本指南
 ```
 
-你的复刻项目就放在 `E:/pi-web/` 根目录，从零开始搭。
+你的复刻项目就放在 `E:/Hearth/` 根目录，从零开始搭。

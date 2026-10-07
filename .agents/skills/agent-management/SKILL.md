@@ -57,7 +57,7 @@ Agent 的**运行方式**可以是「内置模型 API」或「外部 CLI」—�
   4. 找不到 → 错误信息里带上 `where <name>` 的自查提示
 - **环境变量前缀**：模板最前面可写 `KEY=value`（`extractEnvPrefix`，只在开头连续生效），spawn 时并进 `process.env`——不经过 shell，例如 opencode 隔离数据目录：`XDG_DATA_HOME=D:\oc-data opencode run "{{prompt}}"`。
 - **ANSI 清理**：CLI 报错常带颜色码（`\u001B[91m`），正文与 stderr 都要 `stripAnsi`，否则用户看到乱码（踩过：opencode 的报错）。
-- **opencode 特有坑**：它用 `~/.local/share/opencode/opencode.db`（本机 327MB）存会话；**桌面端/其它实例正在用这个库时**，CLI 会报 `Database is not empty and has no session table`（版本间 schema 不一致）。解法：`XDG_DATA_HOME=<独立目录>` 给它一份自己的库（实测可用，预设里默认带 `XDG_DATA_HOME=%LOCALAPPDATA%\pi-web`）。**不要删那个库**——它可能是桌面端正在跑的数据。
+- **opencode 特有坑**：它用 `~/.local/share/opencode/opencode.db`（本机 327MB）存会话；**桌面端/其它实例正在用这个库时**，CLI 会报 `Database is not empty and has no session table`（版本间 schema 不一致）。解法：`XDG_DATA_HOME=<独立目录>` 给它一份自己的库（实测可用，预设里默认带 `XDG_DATA_HOME=%LOCALAPPDATA%\Hearth`）。**不要删那个库**——它可能是桌面端正在跑的数据。
 - **环境变量展开**：模板里可写 `%VAR%`（大小写不敏感，找不到保留原文），在**占位符替换之前**展开——顺序反了会把用户消息里的 `%xx%` 误伤。
 - **opencode 的思考过程（暂不做）**：`opencode run --format json --thinking` 能拿到 `{"type":"reasoning","part":{"text":…}}`，但**实测不是逐字流**（part 完成才整段到达：4 个事件 step_start → reasoning → text → step_finish），会牺牲「打字机」验收项。所以预设保持默认模式（流式正文、无思考）。将来要做的话，得另找流式通道（TUI 用的本地 server/SSE）。
 - **聊天路由**：`createUIMessageStream({ execute })` 里把 `runCliAgent()` 的 stdout 逐块写成 `text-delta`；`generateId: () => createId('msg')` 保证消息 id 与客户端一致（删除/重新生成照常可用）；`onEnd` 复用同一套落库逻辑。

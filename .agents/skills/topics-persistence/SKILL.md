@@ -37,7 +37,7 @@ description: 'Use for SQLite + Drizzle setup, topics/messages schema, session CR
 
 - 用 `@lobehub/ui` 的 **`ActionIconGroup`**（items：`{ key, label, icon, disabled, danger }`）+ `copyToClipboard` + `toast`。
 - **`toast` 需要在根节点挂 `ToastHost`**（`components/AppThemeProvider.tsx` 里已挂 `<ToastHost />`），否则不会有任何提示。
-- 悬停显示：`.pi-msg:hover .pi-msg-actions`（触屏用 `@media (hover: none)` 常显）。
+- 悬停显示：`.hearth-msg:hover .hearth-msg-actions`（触屏用 `@media (hover: none)` 常显）。
 
 ### 关键坑：消息 id 必须两端一致
 

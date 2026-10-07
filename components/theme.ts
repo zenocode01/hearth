@@ -1,5 +1,8 @@
 /** 主题相关的共享常量与类型（服务端/客户端都用）。 */
-export const THEME_COOKIE = 'pi-theme';
+export const THEME_COOKIE = 'hearth-theme';
+
+/** 旧项目名（pi-web）时期的 cookie：读取时兼容一次，用户偏好不丢 */
+export const LEGACY_THEME_COOKIE = 'pi-theme';
 
 export type ThemeMode = 'auto' | 'light' | 'dark';
 

@@ -93,7 +93,7 @@ export const ReasoningBlock = memo(
             {thinking ? <Spin size="small" /> : <Icon icon={ThinkIcon} />}
           </Block>
           <span
-            className={thinking ? 'pi-thinking' : undefined}
+            className={thinking ? 'hearth-thinking' : undefined}
             style={{ fontSize: 12.5, opacity: 0.75 }}
           >
             {label}
@@ -104,7 +104,7 @@ export const ReasoningBlock = memo(
         {/* 折叠：直接挂载/卸载（最可靠，收起时高度绝对为 0），配入场动画 */}
         {open && (
           <div
-            className="pi-scroll pi-collapse-in"
+            className="hearth-scroll hearth-collapse-in"
             ref={bodyRef}
             style={{
               borderLeft: '2px solid var(--ant-color-border, rgba(0, 0, 0, 0.12))',

@@ -1,9 +1,9 @@
 ---
 name: project-overview
-description: 'Use for the pi-web repository map, current roadmap phase, blueprint navigation and layer ownership.'
+description: 'Use for the Hearth repository map, current roadmap phase, blueprint navigation and layer ownership.'
 ---
 
-# pi-web 项目概览
+# Hearth 项目概览
 
 ## 项目是什么
 

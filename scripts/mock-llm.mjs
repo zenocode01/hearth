@@ -9,7 +9,7 @@ const CHUNKS = [
   '测试',
   '。\n\n',
   '```js\n',
-  'console.log("hello pi-web");\n',
+  'console.log("hello hearth");\n',
   '```\n',
 ];
 
