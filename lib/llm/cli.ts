@@ -141,6 +141,20 @@ function extractEnvPrefix(tokens: string[]): { env: Record<string, string>; rest
   return { env, rest: tokens.slice(index) };
 }
 
+/**
+ * 展开模板里的 `%VAR%`（Windows 环境变量，大小写不敏感；找不到就保留原文）。
+ * 只在**模板本身**上展开——占位符替换之后才是用户内容，顺序不能反，否则用户消息里的
+ * `%xx%` 会被误伤。
+ */
+function expandEnvVars(token: string): string {
+  return token.replaceAll(/%([A-Za-z_][A-Za-z0-9_]*)%/g, (whole, name: string) => {
+    const hit = Object.entries(process.env).find(
+      ([key]) => key.toLowerCase() === name.toLowerCase(),
+    );
+    return hit?.[1] ?? whole;
+  });
+}
+
 export interface CliRunOptions {
   command: string;
   prompt: string;
@@ -159,11 +173,11 @@ export function buildCliInvocation({ command, prompt, systemPrompt }: CliRunOpti
   };
 
   const { env, rest } = extractEnvPrefix(parseCommandTemplate(command));
-  const args = rest.map(substitute);
+  const args = rest.map((token) => substitute(expandEnvVars(token)));
   if (args.length === 0) throw new Error('CLI 命令为空');
 
   const resolvedEnv = Object.fromEntries(
-    Object.entries(env).map(([key, value]) => [key, substitute(value)]),
+    Object.entries(env).map(([key, value]) => [key, substitute(expandEnvVars(value))]),
   );
 
   return {

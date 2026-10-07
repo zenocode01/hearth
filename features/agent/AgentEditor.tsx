@@ -31,7 +31,12 @@ interface AgentEditorProps {
 /** 外部 CLI 的常用预设（占位符见下方说明） */
 const CLI_PRESETS = [
   { label: 'Pi', value: 'pi -p --mode json --system-prompt "{{systemPrompt}}" "{{prompt}}"' },
-  { label: 'OpenCode', value: 'opencode run "{{prompt}}"' },
+  {
+    // opencode 默认和桌面端共用数据目录会互抢（报「Database is not empty and has no session table」），
+    // 用 XDG_DATA_HOME 给它一份独立数据目录；%LOCALAPPDATA% 由运行器展开
+    label: 'OpenCode',
+    value: 'XDG_DATA_HOME=%LOCALAPPDATA%\\pi-web opencode run "{{prompt}}"',
+  },
   {
     label: 'Claude Code',
     value: 'claude -p --append-system-prompt "{{systemPrompt}}" "{{prompt}}"',
@@ -306,8 +311,9 @@ export function AgentEditor({ id }: AgentEditorProps) {
               若 CLI 输出 JSON 事件流（如 pi 的 --mode json），其中的思考过程会自动解析成「思考过程」块。
             </Text>
             <Text style={{ fontSize: 12 }} type="secondary">
-              命令最前面可写 KEY=value 给这次运行设环境变量（不经过 shell）。例如 opencode
-              与桌面端共用数据目录会报错时：XDG_DATA_HOME=D:\oc-data opencode run {'{{prompt}}'}
+              命令最前面可写 KEY=value 给这次运行设环境变量（不经过 shell）；模板里的 %VAR%
+              会自动展开成环境变量（如 %LOCALAPPDATA%）。例如 opencode
+              与桌面端报「no session table」时，用预设里的 XDG_DATA_HOME 给它独立数据目录。
             </Text>
           </Flexbox>
         )}
