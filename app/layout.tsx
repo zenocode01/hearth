@@ -4,6 +4,7 @@ import type { PropsWithChildren } from 'react';
 import './globals.css';
 
 import { AppThemeRoot } from '@/components/AppThemeRoot';
+import { BootSplash } from '@/components/BootSplash';
 import { THEME_COOKIE, type ThemeMode } from '@/components/theme';
 
 function isThemeMode(value: string | undefined): value is ThemeMode {
@@ -19,6 +20,8 @@ export default async function RootLayout({ children }: PropsWithChildren) {
   return (
     <html data-theme={initialMode} lang="zh-CN" suppressHydrationWarning>
       <body>
+        {/* 启动占位：服务端就可见，应用壳挂载后自动隐藏（见 BootSplash） */}
+        <BootSplash />
         <AppThemeRoot initialMode={initialMode}>{children}</AppThemeRoot>
       </body>
     </html>

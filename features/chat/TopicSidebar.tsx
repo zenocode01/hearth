@@ -4,6 +4,8 @@ import { Button, Icon, Input, Text } from '@lobehub/ui';
 import { MessageSquarePlus, SquarePen, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
 
+import { Delayed } from '@/components/Delayed';
+import { ListSkeleton } from '@/components/ListSkeleton';
 import type { Agent, Topic } from '@/lib/db/schema';
 
 import { AgentSwitcher } from './AgentSwitcher';
@@ -114,8 +116,11 @@ interface TopicSidebarProps {
   onDelete: (id: string) => void;
   onManageAgents: () => void;
   onRename: (id: string, title: string) => void;
+  onRetryTopics: () => void;
   onSelect: (id: string) => void;
   topics: Topic[];
+  topicsError: boolean;
+  topicsLoading: boolean;
 }
 
 /** 左侧栏：顶部 Agent 切换器 + 新建对话 + 会话列表（切换 / 改名 / 删除）。 */
@@ -131,6 +136,9 @@ export const TopicSidebar = memo(
     onDelete,
     onAgentChange,
     onManageAgents,
+    onRetryTopics,
+    topicsError,
+    topicsLoading,
   }: TopicSidebarProps) => (
     <div
       style={{
@@ -154,7 +162,20 @@ export const TopicSidebar = memo(
         新建对话
       </Button>
       <div className="pi-scroll" style={{ display: 'flex', flex: 1, flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
-        {topics.length === 0 ? (
+        {topicsLoading ? (
+          <Delayed>
+            <ListSkeleton rows={5} size="small" />
+          </Delayed>
+        ) : topicsError ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8 }}>
+            <Text style={{ fontSize: 12 }} type="danger">
+              会话列表加载失败
+            </Text>
+            <Button size="small" onClick={onRetryTopics}>
+              重试
+            </Button>
+          </div>
+        ) : topics.length === 0 ? (
           <Text style={{ fontSize: 12, padding: 8 }} type="secondary">
             还没有会话
           </Text>

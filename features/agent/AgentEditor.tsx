@@ -20,9 +20,11 @@ import { ArrowLeft, Bot, Check, FlaskConical, Terminal } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
+import { AsyncBoundary } from '@/components/AsyncBoundary';
 import type { Agent } from '@/lib/db/schema';
 
 import { AgentAvatar } from './AgentAvatar';
+import { AgentEditorSkeleton } from './AgentEditorSkeleton';
 import { AGENT_ICON_OPTIONS, ICON_AVATAR_PREFIX, getAgentIconOption } from './agentIcons';
 
 interface AgentEditorProps {
@@ -97,26 +99,39 @@ export function AgentEditor({ id }: AgentEditorProps) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [loadStatus, setLoadStatus] = useState<'error' | 'loading' | 'ready'>(
+    isNew ? 'ready' : 'loading',
+  );
 
-  // 编辑已有 Agent：加载
-  useEffect(() => {
+  // 编辑已有 Agent：加载（失败可重试）
+  const loadAgent = useCallback(async () => {
     if (isNew) return;
-    void fetch(`/api/agents/${id}`)
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('not found'))))
-      .then((data: { agent?: Agent }) => {
-        const agent = data.agent;
-        if (!agent) return;
-        setAvatar(agent.avatar ?? '😀');
-        setBackgroundColor(agent.backgroundColor ?? '');
-        setName(agent.name);
-        setSystemPrompt(agent.systemPrompt ?? '');
-        setRuntime(agent.runtime === 'cli' ? 'cli' : 'api');
-        setCliCommand(agent.cliCommand ?? '');
-        setModel(agent.model ?? '');
-        setTemperature(agent.temperature ?? 0.7);
-      })
-      .catch(() => toast.error('Agent 不存在'));
+    setLoadStatus('loading');
+    try {
+      const res = await fetch(`/api/agents/${id}`);
+      if (!res.ok) throw new Error(String(res.status));
+      const data = (await res.json()) as { agent?: Agent };
+      const agent = data.agent;
+      if (!agent) throw new Error('empty');
+      setAvatar(agent.avatar ?? '😀');
+      setBackgroundColor(agent.backgroundColor ?? '');
+      setName(agent.name);
+      setSystemPrompt(agent.systemPrompt ?? '');
+      setRuntime(agent.runtime === 'cli' ? 'cli' : 'api');
+      setCliCommand(agent.cliCommand ?? '');
+      setModel(agent.model ?? '');
+      setTemperature(agent.temperature ?? 0.7);
+      setLoadStatus('ready');
+    } catch {
+      setLoadStatus('error');
+    }
   }, [id, isNew]);
+
+  useEffect(() => {
+    void loadAgent();
+    // 返回列表按钮的意图预取
+    router.prefetch('/agents');
+  }, [loadAgent, router]);
 
   // 可选的模型列表（拉不到就只保留"默认"）
   useEffect(() => {
@@ -166,6 +181,18 @@ export function AgentEditor({ id }: AgentEditorProps) {
       setTesting(false);
     }
   }, [payload]);
+
+  // 编辑已有 Agent：加载中 / 加载失败（错误优先于骨架，失败不会停在骨架屏）
+  if (loadStatus === 'loading') return <AgentEditorSkeleton />;
+  if (loadStatus === 'error') {
+    return (
+      <Flexbox style={{ margin: '0 auto', maxWidth: 760, padding: 24, width: '100%' }}>
+        <AsyncBoundary error loading={false} onRetry={() => void loadAgent()}>
+          {null}
+        </AsyncBoundary>
+      </Flexbox>
+    );
+  }
 
   return (
     <Flexbox gap={16} style={{ margin: '0 auto', maxWidth: 760, padding: 24, width: '100%' }}>

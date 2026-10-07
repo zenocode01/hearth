@@ -8,14 +8,15 @@ import * as m from 'motion/react-m';
 import { useCallback, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 
 import { ThemeControlContext } from './themeContext';
-import { THEME_COOKIE, type ThemeMode } from './theme';import {
+import { APP_READY_EVENT } from './BootSplash';
+import { THEME_COOKIE, type ThemeMode } from './theme';
+import {
   applyInstantly,
   readStoredEffect,
   runThemeTransition,
   THEME_EFFECT_STORAGE_KEY,
   type ThemeTransitionEffect,
 } from './themeTransition';
-
 type Appearance = 'dark' | 'light';
 
 const DARK_QUERY = '(prefers-color-scheme: dark)';
@@ -45,6 +46,12 @@ export function AppThemeProvider({ children, initialMode = 'auto' }: AppThemePro
   const [systemDark, setSystemDark] = useState(false);
 
   const effectRef = useRef(effect);
+
+  // 应用壳挂载完成 → 隐藏首屏启动占位（BootSplash）
+  useEffect(() => {
+    (window as Window & { __PI_APP_READY__?: boolean }).__PI_APP_READY__ = true;
+    window.dispatchEvent(new Event(APP_READY_EVENT));
+  }, []);
 
   // 挂载后解析系统偏好，并监听其变化（系统变化用当前动画效果）
   useEffect(() => {

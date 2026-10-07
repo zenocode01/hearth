@@ -1,7 +1,7 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { Button, Icon, Text, copyToClipboard } from '@lobehub/ui';
+import { Button, Flexbox, Icon, Text, copyToClipboard } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
 import { ThinkIcon } from '@lobehub/ui/icons';
 import type { UIMessage } from 'ai';
@@ -16,6 +16,7 @@ import { ChatComposer } from './ChatComposer';
 import { EmptyState } from './EmptyState';
 import { MessageItem } from './MessageItem';
 import type { MessageActionKey } from './MessageActions';
+import { MessageSkeleton } from './MessageSkeleton';
 import { TopicSidebar } from './TopicSidebar';
 
 /** 距底多少像素内算"在底部" */
@@ -24,10 +25,13 @@ const BOTTOM_THRESHOLD = 32;
 /** 聊天主视图：左侧会话列表 + 顶栏 + 消息列表 + 错误条 + 输入框。 */
 export function ChatView() {
   const [topics, setTopics] = useState<Topic[]>([]);
+  const [topicsStatus, setTopicsStatus] = useState<'error' | 'loading' | 'ready'>('loading');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyStatus, setHistoryStatus] = useState<'error' | 'loading' | 'ready'>('ready');
+  /** 历史加载重试计数：+1 触发加载 effect 重跑 */
+  const [historyAttempt, setHistoryAttempt] = useState(0);
   /** 输入框草稿（受控：支持"放回输入框"） */
   const [draft, setDraft] = useState('');
 
@@ -40,13 +44,21 @@ export function ChatView() {
   // 刚由本页创建的会话：跳过一次历史加载（否则会把刚发出的消息清空）
   const skipHistoryForRef = useRef<string | null>(null);
 
-  const refreshTopics = useCallback(async () => {
+  /**
+   * 拉会话列表。**默认静默**：发送消息 / 改名 / 删除之后的刷新不闪骨架屏；
+   * 只有首次加载（挂载时）传 `{ silent: false }` 才显示骨架 + 错误态。
+   */
+  const refreshTopics = useCallback(async ({ silent = true }: { silent?: boolean } = {}) => {
+    if (!silent) setTopicsStatus('loading');
     try {
       const res = await fetch('/api/topics');
+      if (!res.ok) throw new Error(String(res.status));
       const data = (await res.json()) as { topics?: Topic[] };
       setTopics(data.topics ?? []);
+      setTopicsStatus('ready');
     } catch {
-      /* 列表拉取失败不阻塞聊天 */
+      // 静默刷新失败不打扰：保留现有列表
+      if (!silent) setTopicsStatus('error');
     }
   }, []);
 
@@ -88,11 +100,13 @@ export function ChatView() {
 
   // 启动：拉会话列表 + Agent 列表 + 从 URL 恢复当前会话（刷新后仍停在同一个会话）
   useEffect(() => {
-    void refreshTopics();
+    void refreshTopics({ silent: false });
     void refreshAgents();
+    // 空闲时预取「管理 Agent」页（参考 refs 的意图预取：点过去更快）
+    router.prefetch('/agents');
     const id = new URLSearchParams(window.location.search).get('topic');
     if (id) setActiveTopicId(id);
-  }, [refreshAgents, refreshTopics]);
+  }, [refreshAgents, refreshTopics, router]);
 
   // 当前会话使用哪个 Agent（由会话记录决定；新建会话时用选择器里的值）
   useEffect(() => {
@@ -135,7 +149,7 @@ export function ChatView() {
     }
 
     let cancelled = false;
-    setLoadingHistory(true);
+    setHistoryStatus('loading');
     fetch(`/api/topics/${activeTopicId}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
       .then((data: { messages?: ChatMessage[] }) => {
@@ -155,18 +169,16 @@ export function ChatView() {
         setMessages(history);
         atBottomRef.current = true;
         setAtBottom(true);
+        setHistoryStatus('ready');
       })
       .catch(() => {
-        /* 加载失败保持现状 */
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingHistory(false);
+        if (!cancelled) setHistoryStatus('error');
       });
 
     return () => {
       cancelled = true;
     };
-  }, [activeTopicId, setMessages]);
+  }, [activeTopicId, historyAttempt, setMessages]);
 
   const scrollToBottom = useCallback((smooth: boolean) => {
     const el = scrollRef.current;
@@ -296,6 +308,12 @@ export function ChatView() {
     void regenerate({ body: activeTopicId ? { topicId: activeTopicId } : undefined });
   }, [activeTopicId, clearError, regenerate]);
 
+  /** 历史消息加载失败后的重试 */
+  const retryHistory = useCallback(() => {
+    setHistoryStatus('loading');
+    setHistoryAttempt((count) => count + 1);
+  }, []);
+
   const handleCreate = useCallback(() => {
     stop();
     clearError();
@@ -349,7 +367,10 @@ export function ChatView() {
         onDelete={(id) => void handleDelete(id)}
         onManageAgents={() => router.push('/agents')}
         onRename={(id, title) => void handleRename(id, title)}
+        onRetryTopics={() => void refreshTopics({ silent: false })}
         onSelect={handleSelect}
+        topicsError={topicsStatus === 'error'}
+        topicsLoading={topicsStatus === 'loading'}
       />
 
       <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minWidth: 0 }}>
@@ -383,7 +404,16 @@ export function ChatView() {
             }}
             onScroll={handleScroll}
           >
-            {messages.length === 0 && !busy && !loadingHistory ? (
+            {historyStatus === 'loading' ? (
+              <MessageSkeleton />
+            ) : historyStatus === 'error' && messages.length === 0 ? (
+              <Flexbox align="center" gap={10} style={{ padding: 32 }}>
+                <Text type="danger">历史消息加载失败，请检查网络后重试</Text>
+                <Button size="small" onClick={retryHistory}>
+                  重试
+                </Button>
+              </Flexbox>
+            ) : messages.length === 0 && !busy ? (
               <EmptyState />
             ) : (
               messages.map((message, index) => (
@@ -413,9 +443,6 @@ export function ChatView() {
                 <Icon icon={ThinkIcon} size={14} />
                 模型思考中…
               </span>
-            )}
-            {loadingHistory && (
-              <Text type="secondary">正在加载历史消息…</Text>
             )}
           </div>
 

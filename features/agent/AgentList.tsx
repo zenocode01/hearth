@@ -5,34 +5,43 @@ import { MessageSquare, Plus, SquarePen, Terminal, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
+import { AsyncBoundary } from '@/components/AsyncBoundary';
+import { ListSkeleton } from '@/components/ListSkeleton';
 import type { Agent } from '@/lib/db/schema';
 
 import { AgentAvatar } from './AgentAvatar';
 
-/** Agent 列表页：查看 / 编辑 / 删除。 */
+type LoadStatus = 'error' | 'loading' | 'ready';
+
+/** Agent 列表页：查看 / 编辑 / 删除。三态：骨架（加载）/ 失败可重试 / 空态引导。 */
 export function AgentList() {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [status, setStatus] = useState<LoadStatus>('loading');
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const router = useRouter();
 
-  const refresh = useCallback(async () => {
+  /** silent：删除后静默刷新（不闪骨架、失败也不把列表换成错误页） */
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setStatus('loading');
     try {
       const res = await fetch('/api/agents');
+      if (!res.ok) throw new Error(String(res.status));
       const data = (await res.json()) as { agents?: Agent[] };
       setAgents(data.agents ?? []);
+      setStatus('ready');
     } catch {
-      /* 忽略 */
+      if (!options?.silent) setStatus('error');
     }
   }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void load();
+  }, [load]);
 
   const remove = async (id: string) => {
     await fetch(`/api/agents/${id}`, { method: 'DELETE' });
     setConfirmId(null);
-    void refresh();
+    void load({ silent: true });
   };
 
   return (
@@ -40,23 +49,39 @@ export function AgentList() {
       <Flexbox align="center" horizontal justify="space-between">
         <Text style={{ fontSize: 20, fontWeight: 600 }}>Agent 管理</Text>
         <Flexbox gap={8} horizontal>
-          <Button icon={<MessageSquare size={16} />} onClick={() => router.push('/chat')}>
+          <Button
+            icon={<MessageSquare size={16} />}
+            onMouseEnter={() => router.prefetch('/chat')}
+            onClick={() => router.push('/chat')}
+          >
             回到聊天
           </Button>
-          <Button icon={<Plus size={16} />} type="primary" onClick={() => router.push('/agents/new')}>
+          <Button
+            icon={<Plus size={16} />}
+            type="primary"
+            onMouseEnter={() => router.prefetch('/agents/new')}
+            onClick={() => router.push('/agents/new')}
+          >
             新建 Agent
           </Button>
         </Flexbox>
       </Flexbox>
 
-      {agents.length === 0 ? (
-        <Center style={{ padding: 48 }}>
-          <Flexbox align="center" gap={8}>
-            <FluentEmoji emoji="🤖" size={48} />
-            <Text type="secondary">还没有 Agent，点右上角「新建 Agent」</Text>
-          </Flexbox>
-        </Center>
-      ) : (
+      <AsyncBoundary
+        empty={
+          <Center style={{ padding: 48 }}>
+            <Flexbox align="center" gap={8}>
+              <FluentEmoji emoji="🤖" size={48} />
+              <Text type="secondary">还没有 Agent，点右上角「新建 Agent」</Text>
+            </Flexbox>
+          </Center>
+        }
+        error={status === 'error'}
+        isEmpty={agents.length === 0}
+        loading={status === 'loading'}
+        skeleton={<ListSkeleton rows={3} />}
+        onRetry={() => void load()}
+      >
         <Flexbox gap={8}>
           {agents.map((agent) => (
             <Flexbox
@@ -106,6 +131,7 @@ export function AgentList() {
                     <Button
                       icon={<SquarePen size={16} />}
                       type="text"
+                      onMouseEnter={() => router.prefetch(`/agents/${agent.id}`)}
                       onClick={() => router.push(`/agents/${agent.id}`)}
                     />
                   </Tooltip>
@@ -122,7 +148,7 @@ export function AgentList() {
             </Flexbox>
           ))}
         </Flexbox>
-      )}
+      </AsyncBoundary>
     </Flexbox>
   );
 }
