@@ -96,11 +96,18 @@ export function ChatView() {
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
       .then((data: { messages?: ChatMessage[] }) => {
         if (cancelled) return;
-        const history: UIMessage[] = (data.messages ?? []).map((row) => ({
-          id: row.id,
-          parts: [{ text: row.content, type: 'text' }],
-          role: row.role,
-        }));
+        const history: UIMessage[] = (data.messages ?? []).map((row) => {
+          const parts: UIMessage['parts'] = [];
+          // 推理过程存在时放在正文之前（与实时渲染的结构一致）
+          if (row.reasoning) parts.push({ text: row.reasoning, type: 'reasoning' });
+          if (row.content) parts.push({ text: row.content, type: 'text' });
+          return {
+            id: row.id,
+            metadata: row.reasoningMs ? { reasoningMs: row.reasoningMs } : undefined,
+            parts,
+            role: row.role,
+          };
+        });
         setMessages(history);
         atBottomRef.current = true;
         setAtBottom(true);

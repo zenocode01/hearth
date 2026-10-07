@@ -28,7 +28,8 @@ description: 'Use for SQLite + Drizzle setup, topics/messages schema, session CR
 - **`better-sqlite3` 是原生模块**：npm 12 默认拦截安装脚本（`node-gyp rebuild` 被 block），需 `npm install-scripts approve better-sqlite3` 后 `npm rebuild`，否则运行时报模块加载失败。
 - **drizzle-kit 会先建空库文件**：`generate` 之后 `data/app.db` 可能已存在但没有表——不要用手动建的库判断"迁移已生效"。
 - **建会话与发消息的竞态**：新建会话时若先 `setActiveTopicId`，历史加载 effect 会把刚发出的消息清空。用 `skipHistoryForRef` 跳过这一次历史加载。
-- **推理过程不入库**（阶段 2 简化）：只存文本 `content`；刷新后推理块消失属预期。
+- **推理过程也要入库**（否则刷新后思考内容消失，与 LobeHub 不一致）：`messages` 表有 `reasoning`（文本）与 `reasoning_ms`（耗时）。写入点在 `toUIMessageStream({ onEnd: ({ responseMessage }) => ... })` —— 只有这里能拿到**组装好的 `responseMessage.parts`**（含 `text` 与 `reasoning` 两类 part）；`streamText.onEnd` 只有正文文本。历史消息在 `ChatView` 里还原为 `[reasoning part, text part]`，耗时经 `message.metadata.reasoningMs` 传给 `ReasoningBlock` 的 `durationMs`。
+- **新迁移要重启 dev**：`migrate()` 只在建立新连接时执行，而 dev 进程把连接缓存在 `globalThis`；加列后不重启会出现 `no such column`。重启即自动补跑迁移。
 
 ## 验收（`docs/replica/04` 阶段 2）
 

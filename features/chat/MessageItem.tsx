@@ -28,6 +28,8 @@ export const MessageItem = memo(({ message, startedAt }: MessageItemProps) => {
 
   const hasText = text.trim().length > 0;
   const hasReasoning = reasoning.trim().length > 0;
+  // 历史消息从 metadata 里取已持久化的思考耗时
+  const persistedReasoningMs = (message.metadata as { reasoningMs?: number } | undefined)?.reasoningMs;
 
   return (
     <div
@@ -51,7 +53,12 @@ export const MessageItem = memo(({ message, startedAt }: MessageItemProps) => {
         ) : (
           <>
             {hasReasoning && (
-              <ReasoningBlock startedAt={startedAt} text={reasoning} thinking={!hasText} />
+              <ReasoningBlock
+                durationMs={persistedReasoningMs}
+                startedAt={startedAt}
+                text={reasoning}
+                thinking={!hasText}
+              />
             )}
             {hasText && (
               <Markdown animated variant="chat">

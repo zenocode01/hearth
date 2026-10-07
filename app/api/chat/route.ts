@@ -46,6 +46,7 @@ function humanizeError(error: unknown): string {
 }
 
 export async function POST(req: Request) {
+  const requestStartedAt = Date.now();
   let model;
   try {
     model = createChatModel();
@@ -84,31 +85,44 @@ export async function POST(req: Request) {
   const result = streamText({
     model,
     messages: await convertToModelMessages(uiMessages),
-    // 流式结束后把 AI 回复落库（不阻塞客户端）
-    onEnd: ({ text }) => {
-      if (!topicId || !text.trim()) return;
-      try {
-        const db = getDb();
-        db.insert(messagesTable)
-          .values({
-            content: text,
-            createdAt: new Date(),
-            id: createId('msg'),
-            role: 'assistant',
-            topicId,
-          })
-          .run();
-        db.update(topics).set({ updatedAt: new Date() }).where(eq(topics.id, topicId)).run();
-      } catch (error) {
-        console.error('[chat] 保存 AI 回复失败', error);
-      }
-    },
   });
 
   return createUIMessageStreamResponse({
     stream: toUIMessageStream({
       stream: result.stream,
       onError: humanizeError,
+      // 流式结束后把 AI 回复落库（正文 + 推理过程），不阻塞客户端
+      onEnd: ({ responseMessage }) => {
+        if (!topicId) return;
+
+        const joinParts = (type: 'reasoning' | 'text') =>
+          responseMessage.parts
+            .map((part) => (part.type === type ? part.text : ''))
+            .join('')
+            .trim();
+
+        const text = joinParts('text');
+        const reasoning = joinParts('reasoning');
+        if (!text && !reasoning) return;
+
+        try {
+          const db = getDb();
+          db.insert(messagesTable)
+            .values({
+              content: text,
+              createdAt: new Date(),
+              id: createId('msg'),
+              reasoning: reasoning || null,
+              reasoningMs: reasoning ? Date.now() - requestStartedAt : null,
+              role: 'assistant',
+              topicId,
+            })
+            .run();
+          db.update(topics).set({ updatedAt: new Date() }).where(eq(topics.id, topicId)).run();
+        } catch (error) {
+          console.error('[chat] 保存 AI 回复失败', error);
+        }
+      },
     }),
   });
 }

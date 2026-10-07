@@ -8,6 +8,13 @@
       "when": 1791356266042,
       "tag": "0000_init_topics_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1791358411258,
+      "tag": "0001_add_message_reasoning",
+      "breakpoints": true
     }
   ]
 }
