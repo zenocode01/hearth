@@ -37,6 +37,11 @@ Agent 的**运行方式**可以是「内置模型 API」或「外部 CLI」—�
   - `{{systemPrompt}}` → 人设；模板里没有它时，人设**并进 prompt 开头**
   - 预设：Pi `pi -p --system-prompt "{{systemPrompt}}" "{{prompt}}"`、OpenCode `opencode run "{{prompt}}"`、Claude Code `claude -p --append-system-prompt "{{systemPrompt}}" "{{prompt}}"`（参考 LobeHub 的 `OPENCODE_BASE_ARGS = ['run','--format','json','--thinking','--auto']` 等）
 - **安全**：自己把模板拆成 argv（`parseCommandTemplate`）后 `spawn(file, args, { shell: false })`，**不走 shell** → 用户输入不会被当成 shell 语法执行。
+- **Windows 启动坑**：`spawn` **不补扩展名**（npm 全局包装出来的是 `pi.cmd`，没有 `pi.exe`）→ 直接报 `spawn pi ENOENT`；而 `.cmd`/`.bat` 又**不能**直接 spawn（`EINVAL`）。解法（`resolveCliCommand`）：
+  1. `where.exe <name>` 找实际路径，优先 `.exe` → `.cmd` → `.bat` → `.ps1`
+  2. `.cmd`/`.bat`：正则从 shim 里抠出它执行的 node 脚本（`"%dp0%\node_modules\...\cli.js"`），改用 **`process.execPath` + 脚本路径** 启动（完全绕开 cmd 与引号）
+  3. `.ps1`：改用 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File`
+  4. 找不到 → 错误信息里带上 `where <name>` 的自查提示
 - **聊天路由**：`createUIMessageStream({ execute })` 里把 `runCliAgent()` 的 stdout 逐块写成 `text-delta`；`generateId: () => createId('msg')` 保证消息 id 与客户端一致（删除/重新生成照常可用）；`onEnd` 复用同一套落库逻辑。
 - **失败处理**：命令不存在 / 退出码非 0 → 把错误作为正文写进气泡（`> 运行失败：…`），而不是断流。
 
