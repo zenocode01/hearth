@@ -2,7 +2,7 @@
 
 import { Button, Flexbox, Text } from '@lobehub/ui';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { ThemeDock } from '@/components/ThemeDock';
 
@@ -10,6 +10,11 @@ import { ThemeDock } from '@/components/ThemeDock';
 export default function HomePage() {
   const router = useRouter();
   const [leaving, setLeaving] = useState(false);
+
+  // 空闲时预取聊天页（参考 refs 的路由预取思路）：点「开始聊天」就是秒开
+  useEffect(() => {
+    router.prefetch('/chat');
+  }, [router]);
 
   const enterChat = () => {
     setLeaving(true);
@@ -24,7 +29,13 @@ export default function HomePage() {
           <Text type="secondary">LobeHub 功能复刻版 · 家用配方（Next.js + @lobehub/ui）</Text>
         </Flexbox>
 
-        <Button block loading={leaving} type="primary" onClick={enterChat}>
+        <Button
+          block
+          loading={leaving}
+          type="primary"
+          onMouseEnter={() => router.prefetch('/chat')}
+          onClick={enterChat}
+        >
           开始聊天
         </Button>
 
