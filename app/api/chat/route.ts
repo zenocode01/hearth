@@ -13,7 +13,7 @@ import { getDb } from '@/lib/db';
 import { createId } from '@/lib/db/id';
 import { agents, messages as messagesTable, topics } from '@/lib/db/schema';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
-import { buildCliPrompt, runCliAgent } from '@/lib/llm/cli';
+import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
 
 export const maxDuration = 300;
 
@@ -137,7 +137,27 @@ export async function POST(req: Request) {
     const cliStream = createUIMessageStream({
       execute: async ({ writer }) => {
         const textId = createId('txt');
-        writer.write({ id: textId, type: 'text-start' });
+        const reasoningId = createId('rea');
+        let textOpen = false;
+        let reasoningOpen = false;
+
+        /** 按片段类型懒开启对应的 part（CLI 的思考与正文可能交错到达）。 */
+        const writeChunk = (chunk: CliChunk) => {
+          if (chunk.kind === 'reasoning') {
+            if (!reasoningOpen) {
+              writer.write({ id: reasoningId, type: 'reasoning-start' });
+              reasoningOpen = true;
+            }
+            writer.write({ delta: chunk.delta, id: reasoningId, type: 'reasoning-delta' });
+            return;
+          }
+          if (!textOpen) {
+            writer.write({ id: textId, type: 'text-start' });
+            textOpen = true;
+          }
+          writer.write({ delta: chunk.delta, id: textId, type: 'text-delta' });
+        };
+
         try {
           for await (const chunk of runCliAgent({
             command,
@@ -149,17 +169,15 @@ export async function POST(req: Request) {
             }),
             systemPrompt: agent.systemPrompt,
           })) {
-            writer.write({ delta: chunk, id: textId, type: 'text-delta' });
+            writeChunk(chunk);
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          writer.write({
-            delta: `\n\n> 运行失败：${message}`,
-            id: textId,
-            type: 'text-delta',
-          });
+          writeChunk({ delta: `\n\n> 运行失败：${message}`, kind: 'text' });
         }
-        writer.write({ id: textId, type: 'text-end' });
+
+        if (reasoningOpen) writer.write({ id: reasoningId, type: 'reasoning-end' });
+        if (textOpen) writer.write({ id: textId, type: 'text-end' });
       },
       generateId: () => createId('msg'),
       onEnd: persistAssistant,

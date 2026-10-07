@@ -135,8 +135,64 @@ export function buildCliInvocation({ command, prompt, systemPrompt }: CliRunOpti
   };
 }
 
-/** 运行 CLI，把 stdout 逐块吐出来（stderr 收集起来供报错）。 */
-export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<string> {
+/** CLI 输出的一个片段：正文或思考。 */
+export interface CliChunk {
+  delta: string;
+  kind: 'reasoning' | 'text';
+}
+
+/**
+ * 把 pi 的一行 JSON 事件映射成片段；不是事件（不是 JSON 或没有 type 字段）时返回 null。
+ *
+ * 注意：pi 的事件类型会增长（session / agent_start / turn_start / message_* /
+ * turn_end / agent_end / tool_* …），所以**不做类型白名单**——凡是带 type 的 JSON
+ * 行都当协议事件；只有 message_update 里的 delta 才是给用户看的内容，其余一律丢弃。
+ * 否则新的事件类型会整段漏进正文（踩过：turn_end / agent_end）。
+ */
+function parsePiEvent(line: string): CliChunk[] | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('{')) return null;
+
+  let event: {
+    assistantMessageEvent?: { delta?: unknown; type?: unknown };
+    error?: { message?: unknown };
+    type?: unknown;
+  };
+  try {
+    event = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  if (typeof event?.type !== 'string') return null;
+
+  if (event.type === 'message_update') {
+    const update = event.assistantMessageEvent;
+    const delta = typeof update?.delta === 'string' ? update.delta : '';
+    if (!delta) return [];
+    if (update?.type === 'thinking_delta') return [{ delta, kind: 'reasoning' }];
+    if (update?.type === 'text_delta') return [{ delta, kind: 'text' }];
+    return [];
+  }
+
+  if (event.type === 'error') {
+    const message =
+      typeof event.error?.message === 'string' ? event.error.message : 'CLI 报告了一个错误';
+    return [{ delta: `\n\n> 错误：${message}`, kind: 'text' }];
+  }
+
+  // 其它协议事件（session / turn_start / turn_end / message_start / agent_end …）不产生可见内容
+  return [];
+}
+
+/** 收尾：把没有换行结尾的残留按当前协议处理（TS 看不到闭包内的赋值，故用参数传入）。 */
+function finalizeChunk(value: string, mode: 'pi-json' | 'text' | 'unknown'): CliChunk[] {
+  // pi-json 模式下残留也不是给用户看的内容
+  if (mode === 'pi-json') return parsePiEvent(value) ?? [];
+  return [{ delta: value, kind: 'text' }];
+}
+
+/** 运行 CLI，把 stdout 按「纯文本」或「pi JSONL 协议」解析成片段。 */
+export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliChunk> {
   const invocation = buildCliInvocation(options);
   const { args, file } = resolveCliCommand(invocation.file, invocation.args);
   const stdin = invocation.stdin;
@@ -194,14 +250,59 @@ export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<strin
     wake();
   });
 
+  // 输出解析状态机：先看第一行是不是 pi 的 JSONL 事件，认识就按协议解析，否则整条按纯文本
+  let protocol: 'pi-json' | 'text' | 'unknown' = 'unknown';
+  let buffer = '';
+
+  function* processChunk(chunk: string): Generator<CliChunk> {
+    if (protocol === 'text') {
+      yield { delta: chunk, kind: 'text' };
+      return;
+    }
+
+    buffer += chunk;
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+
+      if (protocol === 'unknown') {
+        const parsed = parsePiEvent(line);
+        if (parsed) {
+          protocol = 'pi-json';
+          yield* parsed;
+          continue;
+        }
+        // 第一行就不是已知事件 → 整个输出按纯文本处理
+        protocol = 'text';
+        yield { delta: `${line}\n`, kind: 'text' };
+        if (buffer) {
+          yield { delta: buffer, kind: 'text' };
+          buffer = '';
+        }
+        continue;
+      }
+
+      const parsed = parsePiEvent(line);
+      // pi-json 模式下正文只来自 message_update 的 delta；其它原始行（协议事件）一律丢弃
+      if (parsed) yield* parsed;
+    }
+  }
+
   try {
     while (true) {
-      while (queue.length > 0) yield queue.shift()!;
+      while (queue.length > 0) yield* processChunk(queue.shift()!);
       if (failure) throw failure;
       if (done) break;
       await new Promise<void>((resolve) => {
         notify = resolve;
       });
+    }
+
+    // 收尾：把没有换行结尾的残留吐出去
+    if (buffer) {
+      yield* finalizeChunk(buffer, protocol);
     }
   } finally {
     options.signal?.removeEventListener('abort', kill);

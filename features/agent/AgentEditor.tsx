@@ -30,7 +30,7 @@ interface AgentEditorProps {
 
 /** 外部 CLI 的常用预设（占位符见下方说明） */
 const CLI_PRESETS = [
-  { label: 'Pi', value: 'pi -p --system-prompt "{{systemPrompt}}" "{{prompt}}"' },
+  { label: 'Pi', value: 'pi -p --mode json --system-prompt "{{systemPrompt}}" "{{prompt}}"' },
   { label: 'OpenCode', value: 'opencode run "{{prompt}}"' },
   {
     label: 'Claude Code',
@@ -301,6 +301,9 @@ export function AgentEditor({ id }: AgentEditorProps) {
             </Text>
             <Text style={{ fontSize: 12 }} type="secondary">
               命令在本机执行（不走 shell，参数不会被当成 shell 语法）；请确保该 CLI 已装好并已登录。
+            </Text>
+            <Text style={{ fontSize: 12 }} type="secondary">
+              若 CLI 输出 JSON 事件流（如 pi 的 --mode json），其中的思考过程会自动解析成「思考过程」块。
             </Text>
           </Flexbox>
         )}

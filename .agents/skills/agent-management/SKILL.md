@@ -35,7 +35,12 @@ Agent 的**运行方式**可以是「内置模型 API」或「外部 CLI」—�
 - **命令模板**（`lib/llm/cli.ts`）：
   - `{{prompt}}` → 「人设 + 对话历史 + 本次输入」（模板里没有它时，内容走 **stdin**）
   - `{{systemPrompt}}` → 人设；模板里没有它时，人设**并进 prompt 开头**
-  - 预设：Pi `pi -p --system-prompt "{{systemPrompt}}" "{{prompt}}"`、OpenCode `opencode run "{{prompt}}"`、Claude Code `claude -p --append-system-prompt "{{systemPrompt}}" "{{prompt}}"`（参考 LobeHub 的 `OPENCODE_BASE_ARGS = ['run','--format','json','--thinking','--auto']` 等）
+  - 预设：Pi `pi -p --mode json --system-prompt "{{systemPrompt}}" "{{prompt}}"`、OpenCode `opencode run "{{prompt}}"`、Claude Code `claude -p --append-system-prompt "{{systemPrompt}}" "{{prompt}}"`（参考 LobeHub 的 `OPENCODE_BASE_ARGS = ['run','--format','json','--thinking','--auto']` 等）
+- **思考过程（推理）**：部分 CLI 的 JSON 模式会带思考流，解析出来写成 `reasoning-delta` → UI 里的「思考过程」块。pi 的事件是 JSONL：
+  - `{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"…"}}` → 推理
+  - `{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"…"}}` → 正文
+  - 顶层还有 `session / agent_start / turn_start / message_start / message_end / turn_end / agent_end / agent_settled / tool_* / error`
+  - **不要做事件类型白名单**：pi 的类型会增长（踩过——`turn_end`/`agent_end` 不在白名单里，整坨 JSON 漏进了正文）。正确做法：**带 `type` 的 JSON 行一律当协议事件，只有 `message_update` 的 delta 才是内容，其余全部丢弃**。纯文本 CLI 则完全不解析（首次看到的第一行不是事件 → 整个输出按文本透传）。
 - **安全**：自己把模板拆成 argv（`parseCommandTemplate`）后 `spawn(file, args, { shell: false })`，**不走 shell** → 用户输入不会被当成 shell 语法执行。
 - **Windows 启动坑**：`spawn` **不补扩展名**（npm 全局包装出来的是 `pi.cmd`，没有 `pi.exe`）→ 直接报 `spawn pi ENOENT`；而 `.cmd`/`.bat` 又**不能**直接 spawn（`EINVAL`）。解法（`resolveCliCommand`）：
   1. `where.exe <name>` 找实际路径，优先 `.exe` → `.cmd` → `.bat` → `.ps1`
