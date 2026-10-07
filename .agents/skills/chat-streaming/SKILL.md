@@ -28,7 +28,14 @@ description: 'Use for the chat page, streaming replies (Vercel AI SDK streamText
   `@ai-sdk/openai-compatible` 的 `createOpenAICompatible(...).chatModel(model)`，provider 不写死。
 - **错误可读（验收项）**：缺配置返回可读文案；`humanizeError` 把 401/403/404/429/网络错误映射成人话。
 - **输入法安全**：Enter 发送、Shift+Enter 换行，拼音组合中（composition）不触发发送。
-- **主题坞在右上角**（`ThemeSwitcher`）：避免与底部输入框重叠。
+- **主题控件在顶栏**（`components/ThemeControls.tsx`）：聊天页放 header，不悬浮、不遮挡内容；主题状态经 `components/themeContext.ts` 共享。
+
+## 滚动体验（已落地）
+
+- **滚动条**：消息容器加 `.pi-scroll` 类（`app/globals.css`）——`scrollbar-width: thin` + `::-webkit-scrollbar` 规则，用 `--ant-color-fill` 跟随主题（Windows 默认滚动条又粗又不随主题）。
+- **回到最新按钮**：`features/chat/BackBottom.tsx`，绝对定位在消息区右下（不随滚动移动），仅 `!atBottom` 时淡入可点。
+- **自动跟随策略（重要）**：只有用户**本来就在底部**（距底 < 32px）时才跟随新内容；上翻阅读时绝不强行拽回，改为亮出"回到最新"按钮。自己发消息时则强制回到底部。
+- 用 `atBottomRef` 记录位置、`useEffect` 只依赖 `messages`：否则平滑滚动产生的 scroll 事件会触发 effect 反过来打断滚动。
 
 ## 离线联调（无需真实 key）
 

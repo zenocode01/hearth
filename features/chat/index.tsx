@@ -2,25 +2,60 @@
 
 import { useChat } from '@ai-sdk/react';
 import { Button, Text } from '@lobehub/ui';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ThemeControls } from '@/components/ThemeControls';
 
+import { BackBottom } from './BackBottom';
 import { ChatComposer } from './ChatComposer';
 import { EmptyState } from './EmptyState';
 import { MessageItem } from './MessageItem';
 
-/** 聊天主视图：顶栏 + 消息列表 + 错误条 + 输入框（见 .agents/skills/chat-streaming）。 */
+/** 距底多少像素内算"在底部" */
+const BOTTOM_THRESHOLD = 32;
+
+/** 聊天主视图：顶栏 + 消息列表（含滚动条/回到最新）+ 错误条 + 输入框。 */
 export function ChatView() {
   const { messages, sendMessage, status, error, stop, clearError, regenerate } = useChat();
   const busy = status === 'submitted' || status === 'streaming';
-  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 新内容到达时滚到底部
-  useEffect(() => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  // 用 ref 记录是否在底部：effect 只依赖 messages，避免与平滑滚动互相打断
+  const atBottomRef = useRef(true);
+
+  const scrollToBottom = useCallback((smooth: boolean) => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    el.scrollTo({ behavior: smooth ? 'smooth' : 'auto', top: el.scrollHeight });
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_THRESHOLD;
+    atBottomRef.current = near;
+    setAtBottom(near);
+  }, []);
+
+  // 新内容到达时：只有用户本来就在底部才跟随（上翻阅读时不被打断）
+  useEffect(() => {
+    if (atBottomRef.current) {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
   }, [messages]);
+
+  const handleSend = useCallback(
+    (text: string) => {
+      // 自己发消息时，无论在哪儿都回到最新
+      atBottomRef.current = true;
+      setAtBottom(true);
+      void sendMessage({ text });
+      requestAnimationFrame(() => scrollToBottom(false));
+    },
+    [scrollToBottom, sendMessage],
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
@@ -39,23 +74,30 @@ export function ChatView() {
         <ThemeControls />
       </div>
 
-      <div
-        ref={scrollRef}
-        style={{
-          display: 'flex',
-          flex: 1,
-          flexDirection: 'column',
-          gap: 16,
-          overflowY: 'auto',
-          padding: 16,
-        }}
-      >
-        {messages.length === 0 && !busy ? (
-          <EmptyState />
-        ) : (
-          messages.map((message) => <MessageItem key={message.id} message={message} />)
-        )}
-        {status === 'submitted' && <Text type="secondary">正在思考…</Text>}
+      {/* 消息区：relative 容器承载"回到最新"按钮 */}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div
+          className="pi-scroll"
+          ref={scrollRef}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+            height: '100%',
+            overflowY: 'auto',
+            padding: 16,
+          }}
+          onScroll={handleScroll}
+        >
+          {messages.length === 0 && !busy ? (
+            <EmptyState />
+          ) : (
+            messages.map((message) => <MessageItem key={message.id} message={message} />)
+          )}
+          {status === 'submitted' && <Text type="secondary">正在思考…</Text>}
+        </div>
+
+        <BackBottom visible={!atBottom} onClick={() => scrollToBottom(true)} />
       </div>
 
       {error && (
@@ -93,7 +135,7 @@ export function ChatView() {
         </div>
       )}
 
-      <ChatComposer busy={busy} onSend={(text) => void sendMessage({ text })} onStop={stop} />
+      <ChatComposer busy={busy} onSend={handleSend} onStop={stop} />
     </div>
   );
 }
