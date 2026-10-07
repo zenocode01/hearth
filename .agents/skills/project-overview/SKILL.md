@@ -36,7 +36,7 @@ React UI → features/ 里的 action/service → app/api 路由 → lib/llm prov
 
 按 `docs/replica/04` 的阶段 0~5 推进。完成一个阶段后更新下面的标记，并把验收结果记进 commit：
 
-- [ ] 阶段 0 · 项目骨架（Next.js + lobe-ui + 深浅色切换）
+- [x] 阶段 0 · 项目骨架（Next.js 16 + lobe-ui + 深浅色切换 ✅ 2026-10，附主题切换动画：淡入/圆形/无，右下水坞可切换）
 - [ ] 阶段 1 · 能聊天的页面（流式）
 - [ ] 阶段 2 · 会话与持久化
 - [ ] 阶段 3 · Agent 管理
