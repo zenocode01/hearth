@@ -71,19 +71,29 @@ function findOnWindowsPath(file: string): string | null {
  * npm 的 .cmd shim 里会执行包内的目标程序，把它抠出来：
  *   "…%dp0%\node_modules\…\cli.js"          → 用 node 跑
  *   "…%dp0%\node_modules\…\bin\xxx.exe"     → 直接跑 exe
+ *
+ * 注意：shim 里可能出现**多个** %dp0% 引用，且不一定都能用。踩过的坑：新版 pi 的 shim
+ * 会先探测 `IF EXIST "%dp0%\node.exe"`（自带运行时），第一个匹配抓到的是这个不存在的
+ * node.exe → 解析失败 → 兜底直接 spawn .cmd → EINVAL。所以：**全部抠出来，只挑磁盘上
+ * 真实存在的**；有 .js/.mjs 就优先用它（说明是 node 包，交给当前 node 跑）。
  */
 function targetFromCmdShim(cmdPath: string): { argsPrefix: string[]; file: string } | null {
   try {
     const content = readFileSync(cmdPath, 'utf8');
-    const match = content.match(/"?%dp0%[\\/]([^"]+?\.(?:exe|c?js|mjs))"?/i);
-    if (!match) return null;
+    const matches = [
+      ...content.matchAll(/"?%dp0%[\\/]([^"]+?\.(?:exe|c?js|mjs))"?/gi),
+    ]
+      .map((match) => path.join(path.dirname(cmdPath), match[1].replaceAll('\\', path.sep)))
+      .filter((target) => existsSync(target));
 
-    const target = path.join(path.dirname(cmdPath), match[1].replaceAll('\\', path.sep));
-    if (!existsSync(target)) return null;
+    const script = matches.find((target) => /\.(?:c?js|mjs)$/i.test(target));
+    if (script) return { argsPrefix: [script], file: process.execPath };
 
-    return target.toLowerCase().endsWith('.exe')
-      ? { argsPrefix: [], file: target }
-      : { argsPrefix: [target], file: process.execPath };
+    // 没有脚本 → 直接跑 exe（opencode 这类原生二进制）；跳过 shim 自己探测的 node.exe
+    const binary = matches.find((target) => !path.basename(target).toLowerCase().startsWith('node.'));
+    if (binary) return { argsPrefix: [], file: binary };
+
+    return null;
   } catch {
     return null;
   }
@@ -104,7 +114,11 @@ export function resolveCliCommand(file: string, args: string[]): { args: string[
   if (lower.endsWith('.cmd') || lower.endsWith('.bat')) {
     const target = targetFromCmdShim(resolved);
     if (target) return { args: [...target.argsPrefix, ...args], file: target.file };
-    return { args, file: resolved };
+    // Windows 不能直接 spawn .cmd/.bat（必 EINVAL）；解析不出来就明确报错，别让用户猜
+    throw new Error(
+      `无法解析 ${resolved} 里的启动目标（可能是新形态的 npm shim）。` +
+        `可改用「node <包内 cli.js 的完整路径>」或直接写可执行文件路径`,
+    );
   }
   if (lower.endsWith('.ps1')) {
     return {
@@ -226,17 +240,36 @@ function finalizeChunk(value: string, mode: 'pi-json' | 'text' | 'unknown'): Cli
   return [{ delta: value, kind: 'text' }];
 }
 
+/** 失败时带上诊断信息（文件、参数概要、长度），便于定位 EINVAL/ENOENT 这类问题。 */
+function describeCommand(file: string, args: string[]): string {
+  const longest = args.reduce((max, arg) => Math.max(max, arg.length), 0);
+  const preview = args
+    .slice(0, 6)
+    .map((arg) => (arg.length > 40 ? `${arg.slice(0, 40)}…` : arg))
+    .join(', ');
+  const more = args.length > 6 ? `, …共 ${args.length} 个` : '';
+  return `file=${file}; args=[${preview}${more}]; 最长参数 ${longest} 字符`;
+}
+
 /** 运行 CLI，把 stdout 按「纯文本」或「pi JSONL 协议」解析成片段。 */
 export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliChunk> {
   const invocation = buildCliInvocation(options);
   const { args, file } = resolveCliCommand(invocation.file, invocation.args);
   const stdin = invocation.stdin;
 
-  const child = spawn(file, args, {
-    env: { ...process.env, ...invocation.env },
-    shell: false,
-    windowsHide: true,
-  });
+  const detail = describeCommand(file, args);
+
+  let child;
+  try {
+    child = spawn(file, args, {
+      env: { ...process.env, ...invocation.env },
+      shell: false,
+      windowsHide: true,
+    });
+  } catch (error) {
+    // spawn 遇到非法参数会**同步抛错**（如 EINVAL），这里补上上下文再抛出
+    throw new Error(`启动命令失败：${(error as Error).message}（${detail}）`);
+  }
 
   const kill = () => child.kill();
   options.signal?.addEventListener('abort', kill, { once: true });
@@ -270,7 +303,8 @@ export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliCh
   child.on('error', (error) => {
     failure = new Error(
       `无法启动命令「${invocation.file}」：${error.message}。请确认它已安装并在 PATH 中` +
-        (process.platform === 'win32' ? `（可执行 where ${invocation.file} 检查）` : ''),
+        (process.platform === 'win32' ? `（可执行 where ${invocation.file} 检查）` : '') +
+        `（${detail}）`,
     );
     done = true;
     wake();

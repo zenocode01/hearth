@@ -44,7 +44,9 @@ Agent 的**运行方式**可以是「内置模型 API」或「外部 CLI」—�
 - **安全**：自己把模板拆成 argv（`parseCommandTemplate`）后 `spawn(file, args, { shell: false })`，**不走 shell** → 用户输入不会被当成 shell 语法执行。
 - **Windows 启动坑**：`spawn` **不补扩展名**（npm 全局包装出来的是 `pi.cmd`，没有 `pi.exe`）→ 直接报 `spawn pi ENOENT`；而 `.cmd`/`.bat` 又**不能**直接 spawn（`EINVAL`）。解法（`resolveCliCommand`）：
   1. `where.exe <name>` 找实际路径，优先 `.exe` → `.cmd` → `.bat` → `.ps1`
-  2. `.cmd`/`.bat`：正则从 shim 里抠出它执行的目标（`"%dp0%\node_modules\...\cli.js"` 用 `process.execPath` 跑；`"%dp0%\node_modules\...\bin\opencode.exe"` 直接跑 exe——踩过：只认 `.js` 时 opencode 报 `spawn EINVAL`）
+  2. `.cmd`/`.bat`：从 shim 里抠出它执行的目标——**要抠出全部 `%dp0%` 引用，只挑磁盘上真实存在的**（踩过：新版 pi 的 shim 顶部有 `IF EXIST "%dp0%\node.exe"` 探测，只取第一个匹配就会拿到不存在的 node.exe → 解析失败 → 兜底直接 spawn `.cmd` → `spawn EINVAL`）。有 `.js`/`.mjs` 就优先用它 + `process.execPath`；否则跑 `.exe`（跳过 node.exe），见 `targetFromCmdShim`
+  2b. 解析不出来时**直接报错**，不要退回 `spawn(某.cmd)`——Windows 上那必然 `EINVAL`
+  2c. spawn 遇到非法参数是**同步抛错**（不是 `error` 事件）：要 `try/catch` 包住并带上诊断（`describeCommand`：file / 参数概要 / 最长参数长度），否则用户只看到光秃秃的 `spawn EINVAL`
   3. `.ps1`：改用 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File`
   4. 找不到 → 错误信息里带上 `where <name>` 的自查提示
 - **环境变量前缀**：模板最前面可写 `KEY=value`（`extractEnvPrefix`，只在开头连续生效），spawn 时并进 `process.env`——不经过 shell，例如 opencode 隔离数据目录：`XDG_DATA_HOME=D:\oc-data opencode run "{{prompt}}"`。
