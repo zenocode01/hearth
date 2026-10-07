@@ -55,6 +55,12 @@ toUIMessageStream({
 
 - **重新生成的顺序**：先 `await` 旧回复的 DELETE，再 `regenerate()`；并发会导致库里留下两条。
 
+### 分支（从消息派生新会话）
+
+LobeHub 的"分支"是从消息开一个 thread；我们的等价实现：`POST /api/topics/[id]/branch { messageId }` —— 把该会话**到这条消息为止**的内容复制进一个新 topic（标题 `原标题 · 分支`，消息用新 id，保留 `reasoning` / `reasoning_ms` / `createdAt`），客户端创建后切过去。
+
+- **截断要按下标、不要按时间**：先按 `createdAt` 正序取全部消息，再 `slice(0, index + 1)`；用 `lte(createdAt)` 会在同毫秒的消息上多带。
+
 ## 验收（`docs/replica/04` 阶段 2）
 
 - [x] 刷新不丢（重载后消息从库里恢复）

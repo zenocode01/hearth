@@ -214,6 +214,28 @@ export function ChatView() {
           });
           break;
         }
+        case 'branch': {
+          if (!activeTopicId) break;
+          try {
+            const res = await fetch(`/api/topics/${activeTopicId}/branch`, {
+              body: JSON.stringify({ messageId: message.id }),
+              headers: { 'content-type': 'application/json' },
+              method: 'POST',
+            });
+            const data = (await res.json()) as { topic?: Topic };
+            if (data.topic?.id) {
+              await refreshTopics();
+              // 切到分支会话（会触发历史加载）
+              setActiveTopicId(data.topic.id);
+              toast.success('已创建分支会话');
+            } else {
+              toast.error('创建分支失败');
+            }
+          } catch {
+            toast.error('创建分支失败');
+          }
+          break;
+        }
         case 'delete': {
           await fetch(`/api/messages/${message.id}`, { method: 'DELETE' });
           setMessages((prev) => prev.filter((item) => item.id !== message.id));
