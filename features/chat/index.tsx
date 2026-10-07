@@ -1,7 +1,7 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { Button, Icon, Select, Text, copyToClipboard } from '@lobehub/ui';
+import { Button, Icon, Text, copyToClipboard } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
 import { ThinkIcon } from '@lobehub/ui/icons';
 import type { UIMessage } from 'ai';
@@ -340,10 +340,14 @@ export function ChatView() {
   return (
     <div style={{ display: 'flex', height: '100dvh' }}>
       <TopicSidebar
+        activeAgentId={activeAgentId}
         activeId={activeTopicId}
+        agents={agents}
         topics={topics}
+        onAgentChange={(id) => void handleAgentChange(id)}
         onCreate={handleCreate}
         onDelete={(id) => void handleDelete(id)}
+        onManageAgents={() => router.push('/agents')}
         onRename={(id, title) => void handleRename(id, title)}
         onSelect={handleSelect}
       />
@@ -360,25 +364,7 @@ export function ChatView() {
             padding: '8px 16px',
           }}
         >
-          <span style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
-            <Text style={{ fontSize: 16, fontWeight: 600 }}>pi-web</Text>
-            <Select
-              options={[
-                { label: '默认 Agent', value: '' },
-                ...agents.map((agent) => ({
-                  label: `${agent.avatar ?? '😀'} ${agent.name}`,
-                  value: agent.id,
-                })),
-              ]}
-              size="small"
-              style={{ minWidth: 150 }}
-              value={activeAgentId ?? ''}
-              onChange={(value) => void handleAgentChange(value as string)}
-            />
-            <Button size="small" onClick={() => router.push('/agents')}>
-              管理 Agent
-            </Button>
-          </span>
+          <Text style={{ fontSize: 16, fontWeight: 600 }}>pi-web</Text>
           <ThemeControls />
         </div>
 

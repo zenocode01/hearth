@@ -12,9 +12,12 @@ description: 'Use for the agents table, Agent Builder form, agent list, agent se
 - **表**：`agents(id, name, avatar, system_prompt, model, temperature, created_at, updated_at)`；`topics.agent_id`（可空，`ON DELETE SET NULL`——删 Agent 后会话回到默认）。
 - **API**：`GET/POST /api/agents`、`GET/PATCH/DELETE /api/agents/[id]`、`POST /api/agents/test`（**无状态**：直接用表单里的配置试一句，未保存也能测）、`GET /api/models`（从 provider 的 `/models` 拉列表，拉不到就退化成只有"默认"）。
 - **页面**：`/agents` 列表（编辑/删除两段确认）、`/agents/new`、`/agents/[id]`（`features/agent/`）。
-- **聊天接入**：顶栏 `Select` 选 Agent + "管理 Agent"；新建会话时带上 `agentId`，已有会话切换 Agent 走 `PATCH /api/topics/[id]`；请求体带 `agentId`。
+- **聊天接入**：**Agent 切换器在侧栏顶部**（会话列表上方，与 LobeHub 的 `AgentSidebar/Header/Agent` 一致）：触发器是"头像 + 名字 + 上下箭头"，点开是切换面板（含"管理 Agent"入口）。聊天顶栏只留标题与主题控件。新建会话时带上 `agentId`，已有会话切换 Agent 走 `PATCH /api/topics/[id]`。
 
 ## 关键坑（都踩过）
+
+- **base-ui Popover 的触发器不能是 `<button>`**：用 lobe-ui 的 `Button` 当触发器会报 `Base UI: A component that acts as a button expected a non-<button>...`。要 `nativeButton={false}` + 非 button 触发器（`Block` / div）。参考 `SidebarHeaderSelectPopover` 的写法。
+- **选完要自己关闭面板**：LobeHub 靠路由跳转关闭；我们不跳路由，所以 Popover 要**受控**（`open` + `onOpenChange`），选中时 `setOpen(false)`。
 
 - **AI SDK v7 不允许在 `messages` 里放 system 消息**：会报 `AI_InvalidPromptError: System messages are not allowed...`。人设要走 **`instructions`** 选项（`generateText` / `streamText` 都一样）。
 - **PATCH 必须只更新显式字段**：用"全量归一化"（缺省字段给默认值）会把没传的 name/avatar 冲成默认值——只改人设就会把 Agent 改名。见 `lib/agents/normalize.ts` 的 `normalizeAgentPatch`。

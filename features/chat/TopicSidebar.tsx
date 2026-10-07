@@ -4,7 +4,9 @@ import { Button, Icon, Input, Text } from '@lobehub/ui';
 import { MessageSquarePlus, SquarePen, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
 
-import type { Topic } from '@/lib/db/schema';
+import type { Agent, Topic } from '@/lib/db/schema';
+
+import { AgentSwitcher } from './AgentSwitcher';
 
 interface TopicRowProps {
   active: boolean;
@@ -104,17 +106,32 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete }: TopicRow
 TopicRow.displayName = 'TopicRow';
 
 interface TopicSidebarProps {
+  activeAgentId: string | null;
   activeId: string | null;
+  agents: Agent[];
+  onAgentChange: (agentId: string) => void;
   onCreate: () => void;
   onDelete: (id: string) => void;
+  onManageAgents: () => void;
   onRename: (id: string, title: string) => void;
   onSelect: (id: string) => void;
   topics: Topic[];
 }
 
-/** 左侧会话列表：新建 / 切换 / 改名 / 删除（删除两段确认，不做乐观更新）。 */
+/** 左侧栏：顶部 Agent 切换器 + 新建对话 + 会话列表（切换 / 改名 / 删除）。 */
 export const TopicSidebar = memo(
-  ({ topics, activeId, onSelect, onCreate, onRename, onDelete }: TopicSidebarProps) => (
+  ({
+    topics,
+    activeId,
+    activeAgentId,
+    agents,
+    onSelect,
+    onCreate,
+    onRename,
+    onDelete,
+    onAgentChange,
+    onManageAgents,
+  }: TopicSidebarProps) => (
     <div
       style={{
         borderRight: '1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06))',
@@ -126,6 +143,13 @@ export const TopicSidebar = memo(
         width: 240,
       }}
     >
+      {/* Agent 切换器放在会话列表上方（与 LobeHub 一致） */}
+      <AgentSwitcher
+        activeAgentId={activeAgentId}
+        agents={agents}
+        onChange={onAgentChange}
+        onManage={onManageAgents}
+      />
       <Button block icon={<Icon icon={MessageSquarePlus} size={16} />} onClick={onCreate}>
         新建对话
       </Button>
