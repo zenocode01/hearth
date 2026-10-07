@@ -53,7 +53,14 @@ npm run mock:llm          # 终端 A：本地 mock（OpenAI 兼容 SSE，端口 
 
 ## 模型备注
 
-- 当前接入的是**推理模型**（`qwen3.8-27b`）：正文前有 3~5 秒思考时间，`completion_tokens_details.reasoning_tokens` 不为 0；UI 目前忽略 reasoning 部分，只渲染正文。若以后要展示"思考中"，读 `message.parts` 里的 reasoning 类型即可。
+- 当前接入的是**推理模型**（`qwen3.8-27b`）：正文前有若干秒思考时间，`completion_tokens_details.reasoning_tokens` 不为 0。
+
+### 推理模型必须处理"思考"（否则看起来像卡住）
+
+- **字段**：上游把推理放在 `delta.reasoning`（非标准的 `reasoning_content`）；`@ai-sdk/openai-compatible` 两者都认（`delta.reasoning_content ?? delta.reasoning`）。`toUIMessageStream` 的 `sendReasoning` **默认 true**，所以 `message.parts` 里已经有 `{ type: 'reasoning', text }`。
+- **必须做的两件事**：
+  1. **指示器**：从提交到**首条内容（含推理）**到达前，必须显示"思考中"（`waitingFirstToken = busy && 最后一条 assistant 消息没有任何 text/reasoning`）。只在 `status === 'submitted'` 时显示是不够的——进入 `streaming` 后正文可能还没来，指示器一消失就像卡死。
+  2. **渲染推理**：`MessageItem` 渲染 reasoning part——正文未到时展开显示（"💭 思考中…"，内部自动滚到最新），正文出现后弱化为可回看的"💭 思考过程"区块。
 
 ## 常见翻车
 

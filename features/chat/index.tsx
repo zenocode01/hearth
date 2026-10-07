@@ -19,6 +19,18 @@ export function ChatView() {
   const { messages, sendMessage, status, error, stop, clearError, regenerate } = useChat();
   const busy = status === 'submitted' || status === 'streaming';
 
+  const lastMessage = messages[messages.length - 1];
+  // 提交后 → 首条内容（含"推理"）到达前，必须有指示，否则看起来像卡住
+  const waitingFirstToken =
+    busy &&
+    !(
+      lastMessage?.role === 'assistant' &&
+      lastMessage.parts.some(
+        (part) =>
+          (part.type === 'text' || part.type === 'reasoning') && part.text.trim().length > 0,
+      )
+    );
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   // 用 ref 记录是否在底部：effect 只依赖 messages，避免与平滑滚动互相打断
@@ -94,7 +106,11 @@ export function ChatView() {
           ) : (
             messages.map((message) => <MessageItem key={message.id} message={message} />)
           )}
-          {status === 'submitted' && <Text type="secondary">正在思考…</Text>}
+          {waitingFirstToken && (
+            <Text className="pi-thinking" type="secondary">
+              💭 模型思考中…
+            </Text>
+          )}
         </div>
 
         <BackBottom visible={!atBottom} onClick={() => scrollToBottom(true)} />

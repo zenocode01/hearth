@@ -43,6 +43,22 @@ html[data-theme='dark'] {
   background-color: var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.25));
 }
 
+/* "思考中…"的呼吸动画 */
+@keyframes pi-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.pi-thinking {
+  animation: pi-pulse 1.4s ease-in-out infinite;
+}
+
 /*
  * 主题切换：关闭浏览器默认的交叉淡入，改由 JS 按所选效果驱动
  * （淡入淡出 / 圆形扩散），见 components/themeTransition.ts。
