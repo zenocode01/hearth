@@ -27,8 +27,8 @@ description: 'Use for theming with @lobehub/ui tokens, dark/light mode, antd-sty
 
 - **初始主题走 cookie**：`app/layout.tsx` 服务端读 `pi-theme` cookie 并渲染到 `<html data-theme>`。服务端与首帧一致 → 无水合错配、无白闪。（因此 `/` 是动态渲染，正常。）
 - **主题壳客户端渲染**：`AppThemeRoot` 用 `dynamic(..., { ssr: false })`。原因：antd-style/emotion 在 Next App Router 下服务端与客户端样式注入不一致，直接 SSR 会 "Hydration failed"。首屏底色由 `globals.css` + `<html data-theme>` 兜底。
-- **切换动画用 View Transitions**：`document.startViewTransition(() => flushSync(update))` 对整页做 ~280ms 交叉淡入；不支持的浏览器降级为"统一颜色过渡"；`prefers-reduced-motion` 时直接切换。
-- **切换时务必处理 CSS transition**：body 背景是瞬切（0s）、antd 组件默认 `transition: all 0.2s`，不同步 = 错位闪烁。用 View Transitions 时给真实 DOM 注入 `transition:none!important`（窗口约 400ms，需覆盖 antd-style 重新生成样式的 ~100ms），动画交给快照。
+- **切换动画可配置**：右下角"主题坞"（`ThemeSwitcher`）除模式外，还有"切换动画"选项：`fade`（整页交叉淡入）/ `circle`（从点击位置圆形扩散）/ `none`（瞬时）。逻辑在 `components/themeTransition.ts`：`runThemeTransition(update, effect)` 用 `document.startViewTransition(() => flushSync(update))`，`fade` 用 `::view-transition-old/new(root)` 的 `opacity`，`circle` 用 `::view-transition-new(root)` 的 `clip-path`（圆心取最近一次 pointerdown）。不支持 View Transitions 时统一降级为"颜色过渡"；`prefers-reduced-motion` 时瞬时切换。效果偏好存 localStorage（`pi-theme-effect`，纯客户端行为）。
+- **切换时务必处理 CSS transition**：body 背景是瞬切（0s）、antd 组件默认 `transition: all 0.2s`，不同步 = 错位闪烁。用 View Transitions 时给真实 DOM 注入 `transition:none!important`，窗口需覆盖 antd-style 重新生成样式的 ~100ms（当前取 `CIRCLE_DURATION_MS + 600` ms），动画交给快照。
 
 ## 三态纪律（每个页面）
 

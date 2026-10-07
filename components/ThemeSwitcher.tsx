@@ -1,37 +1,59 @@
 'use client';
 
-import { Segmented } from '@lobehub/ui';
+import { Flexbox, Segmented, Text } from '@lobehub/ui';
 
 import type { ThemeMode } from './theme';
+import type { ThemeTransitionEffect } from './themeTransition';
 
-interface ThemeSwitcherProps {
-  mode: ThemeMode;
-  onChange: (mode: ThemeMode) => void;
-}
-
-const OPTIONS: Array<{ label: string; value: ThemeMode }> = [
+const MODE_OPTIONS: Array<{ label: string; value: ThemeMode }> = [
   { label: '🌗 跟随系统', value: 'auto' },
   { label: '☀️ 浅色', value: 'light' },
   { label: '🌙 深色', value: 'dark' },
 ];
 
-/** 右下角固定的主题切换器（阶段 0 验收点：深浅色切换正常）。 */
-export function ThemeSwitcher({ mode, onChange }: ThemeSwitcherProps) {
+const EFFECT_OPTIONS: Array<{ label: string; value: ThemeTransitionEffect }> = [
+  { label: '淡入', value: 'fade' },
+  { label: '圆形', value: 'circle' },
+  { label: '无', value: 'none' },
+];
+
+interface ThemeSwitcherProps {
+  mode: ThemeMode;
+  onModeChange: (mode: ThemeMode) => void;
+  effect: ThemeTransitionEffect;
+  onEffectChange: (effect: ThemeTransitionEffect) => void;
+}
+
+/** 右下角固定的主题坞：模式切换 + 切换动画设置。 */
+export function ThemeSwitcher({
+  mode,
+  onModeChange,
+  effect,
+  onEffectChange,
+}: ThemeSwitcherProps) {
   return (
-    <div
-      style={{
-        bottom: 16,
-        position: 'fixed',
-        right: 16,
-        zIndex: 99,
-      }}
+    <Flexbox
+      align="flex-end"
+      gap={8}
+      style={{ bottom: 16, position: 'fixed', right: 16, zIndex: 99 }}
     >
       <Segmented
         block={false}
-        options={OPTIONS}
+        options={MODE_OPTIONS}
         value={mode}
-        onChange={(value) => onChange(value as ThemeMode)}
+        onChange={(value) => onModeChange(value as ThemeMode)}
       />
-    </div>
+      <Flexbox align="center" gap={6} horizontal>
+        <Text style={{ fontSize: 12 }} type="secondary">
+          切换动画
+        </Text>
+        <Segmented
+          size="small"
+          options={EFFECT_OPTIONS}
+          value={effect}
+          onChange={(value) => onEffectChange(value as ThemeTransitionEffect)}
+        />
+      </Flexbox>
+    </Flexbox>
   );
 }

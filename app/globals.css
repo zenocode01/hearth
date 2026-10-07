@@ -18,18 +18,16 @@ html[data-theme='dark'] {
 }
 
 /*
- * 主题切换动画：View Transitions 整页交叉淡入。
- * 时长/缓动与 components/theme.ts 的 THEME_TRANSITION_MS / EASE 保持一致。
+ * 主题切换：关闭浏览器默认的交叉淡入，改由 JS 按所选效果驱动
+ * （淡入淡出 / 圆形扩散），见 components/themeTransition.ts。
+ * 时长与缓动常量在 components/theme.ts。
  */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 280ms;
-  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+::view-transition-group(root) {
+  animation-duration: 0s;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation: none;
-  }
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }
