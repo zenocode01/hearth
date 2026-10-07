@@ -59,6 +59,23 @@ html[data-theme='dark'] {
   animation: pi-pulse 1.4s ease-in-out infinite;
 }
 
+/* 推理内容展开时的入场动画 */
+@keyframes pi-collapse-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pi-collapse-in {
+  animation: pi-collapse-in 0.18s ease;
+}
+
 /*
  * 主题切换：关闭浏览器默认的交叉淡入，改由 JS 按所选效果驱动
  * （淡入淡出 / 圆形扩散），见 components/themeTransition.ts。

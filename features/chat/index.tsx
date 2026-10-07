@@ -35,6 +35,8 @@ export function ChatView() {
   const [atBottom, setAtBottom] = useState(true);
   // 用 ref 记录是否在底部：effect 只依赖 messages，避免与平滑滚动互相打断
   const atBottomRef = useRef(true);
+  // 本次请求的发起时间：用于 AI 消息显示"已深度思考 N 秒"
+  const requestStartedAtRef = useRef<number | null>(null);
 
   const scrollToBottom = useCallback((smooth: boolean) => {
     const el = scrollRef.current;
@@ -63,11 +65,18 @@ export function ChatView() {
       // 自己发消息时，无论在哪儿都回到最新
       atBottomRef.current = true;
       setAtBottom(true);
+      requestStartedAtRef.current = Date.now();
       void sendMessage({ text });
       requestAnimationFrame(() => scrollToBottom(false));
     },
     [scrollToBottom, sendMessage],
   );
+
+  const handleRetry = useCallback(() => {
+    clearError();
+    requestStartedAtRef.current = Date.now();
+    void regenerate();
+  }, [clearError, regenerate]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
@@ -104,7 +113,17 @@ export function ChatView() {
           {messages.length === 0 && !busy ? (
             <EmptyState />
           ) : (
-            messages.map((message) => <MessageItem key={message.id} message={message} />)
+            messages.map((message, index) => (
+              <MessageItem
+                key={message.id}
+                message={message}
+                startedAt={
+                  message.role === 'assistant' && index === messages.length - 1
+                    ? (requestStartedAtRef.current ?? undefined)
+                    : undefined
+                }
+              />
+            ))
           )}
           {waitingFirstToken && (
             <Text className="pi-thinking" type="secondary">
@@ -134,13 +153,7 @@ export function ChatView() {
           <span>{error.message}</span>
           <span style={{ display: 'flex', flexShrink: 0, gap: 8 }}>
             {messages.length > 0 && (
-              <Button
-                size="small"
-                onClick={() => {
-                  clearError();
-                  void regenerate();
-                }}
-              >
+              <Button size="small" onClick={handleRetry}>
                 重试
               </Button>
             )}

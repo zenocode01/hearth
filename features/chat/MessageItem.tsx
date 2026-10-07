@@ -2,54 +2,21 @@
 
 import { Markdown } from '@lobehub/ui';
 import type { UIMessage } from 'ai';
-import { memo, useEffect, useRef } from 'react';
+import { memo } from 'react';
+
+import { ReasoningBlock } from './ReasoningBlock';
 
 interface MessageItemProps {
   message: UIMessage;
+  /** 发起本次请求的时间戳（只对最后一条 AI 消息有意义） */
+  startedAt?: number;
 }
 
-/** 推理模型的"思考过程"：正文出现前展开显示，出现后作为可回看的弱化区块。 */
-const ReasoningBlock = memo(({ thinking, text }: { thinking: boolean; text: string }) => {
-  const bodyRef = useRef<HTMLDivElement>(null);
-
-  // 思考阶段持续滚到最新一行
-  useEffect(() => {
-    const el = bodyRef.current;
-    if (el && thinking) el.scrollTop = el.scrollHeight;
-  }, [text, thinking]);
-
-  return (
-    <div style={{ marginBottom: thinking ? 0 : 10 }}>
-      <div style={{ fontSize: 12, marginBottom: 4, opacity: 0.6 }}>
-        {thinking ? '💭 思考中…' : '💭 思考过程'}
-      </div>
-      <div
-        className="pi-scroll"
-        ref={bodyRef}
-        style={{
-          borderLeft: '2px solid var(--ant-color-border, rgba(0, 0, 0, 0.12))',
-          fontSize: 12.5,
-          lineHeight: 1.7,
-          maxHeight: 200,
-          opacity: 0.7,
-          overflowY: 'auto',
-          paddingLeft: 10,
-          whiteSpace: 'pre-wrap',
-        }}
-      >
-        {text}
-      </div>
-    </div>
-  );
-});
-
-ReasoningBlock.displayName = 'ReasoningBlock';
-
 /**
- * 渲染一条消息：用户为浅色气泡；AI 为推理（可选）+ Markdown 正文。
+ * 渲染一条消息：用户为浅色气泡；AI 为推理（可收缩/展开）+ Markdown 正文。
  * 颜色用 antd 的 CSS 变量（--ant-color-*），随深浅色自动切换。
  */
-export const MessageItem = memo(({ message }: MessageItemProps) => {
+export const MessageItem = memo(({ message, startedAt }: MessageItemProps) => {
   const isUser = message.role === 'user';
 
   const reasoning = message.parts
@@ -83,7 +50,9 @@ export const MessageItem = memo(({ message }: MessageItemProps) => {
           <span>{text}</span>
         ) : (
           <>
-            {hasReasoning && <ReasoningBlock text={reasoning} thinking={!hasText} />}
+            {hasReasoning && (
+              <ReasoningBlock startedAt={startedAt} text={reasoning} thinking={!hasText} />
+            )}
             {hasText && (
               <Markdown animated variant="chat">
                 {text}

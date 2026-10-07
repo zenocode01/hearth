@@ -60,7 +60,12 @@ npm run mock:llm          # 终端 A：本地 mock（OpenAI 兼容 SSE，端口 
 - **字段**：上游把推理放在 `delta.reasoning`（非标准的 `reasoning_content`）；`@ai-sdk/openai-compatible` 两者都认（`delta.reasoning_content ?? delta.reasoning`）。`toUIMessageStream` 的 `sendReasoning` **默认 true**，所以 `message.parts` 里已经有 `{ type: 'reasoning', text }`。
 - **必须做的两件事**：
   1. **指示器**：从提交到**首条内容（含推理）**到达前，必须显示"思考中"（`waitingFirstToken = busy && 最后一条 assistant 消息没有任何 text/reasoning`）。只在 `status === 'submitted'` 时显示是不够的——进入 `streaming` 后正文可能还没来，指示器一消失就像卡死。
-  2. **渲染推理**：`MessageItem` 渲染 reasoning part——正文未到时展开显示（"💭 思考中…"，内部自动滚到最新），正文出现后弱化为可回看的"💭 思考过程"区块。
+  2. **可折叠的推理块**（`features/chat/ReasoningBlock.tsx`，参考 refs 的 `Conversation/components/Thinking`）：
+     - 思考中：**自动展开**，转圈图标 + 呼吸的"思考中…"，内容自动滚到最新；
+     - 思考结束：**自动收起**为一行"已深度思考 N 秒"；
+     - 点标题可**自由收缩 / 展开**。
+- **时长必须从"发起请求"计时**（`ChatView` 记录 `startedAt` 传给最后一条 AI 消息），**不能从推理文本到达计时**：上游常常临近结束才批量吐出推理（实测出现过 7.5 秒才拿到推理、0.3 秒后就出正文，从文本到达算只有 0.3 秒）。
+- **折叠实现用条件渲染**（`{open && ...}` + 入场动画）。实测在本项目结构下：`grid-template-rows: 0fr` 不塌缩（计算值仍是内容高度）、`max-height` 过渡会被反复重启不生效。条件渲染的收起高度绝对是 0。
 
 ## 常见翻车
 
