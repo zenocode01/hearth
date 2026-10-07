@@ -2,7 +2,7 @@
 
 import { Segmented } from '@lobehub/ui';
 
-export type ThemeMode = 'auto' | 'light' | 'dark';
+import type { ThemeMode } from './theme';
 
 interface ThemeSwitcherProps {
   mode: ThemeMode;

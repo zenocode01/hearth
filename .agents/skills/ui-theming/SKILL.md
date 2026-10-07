@@ -21,6 +21,15 @@ description: 'Use for theming with @lobehub/ui tokens, dark/light mode, antd-sty
 3. 样式优先 `createStaticStyles`（零运行时）；组件优先 `@lobehub/ui` 现成的，不手搓 antd 基础组件。
 4. 文案语气参考 DESIGN.md 的 Voice（自然 / 意义感 / 确定性 / 成长）。
 
+## 本项目主题架构（阶段 0 已落地）
+
+文件：`components/AppThemeRoot.tsx`（客户端壳）、`components/AppThemeProvider.tsx`（装配 + 切换动画）、`components/theme.ts`（常量）、`app/layout.tsx`（服务端读 cookie）、`app/globals.css`（首屏兜底 + View Transitions 样式）。
+
+- **初始主题走 cookie**：`app/layout.tsx` 服务端读 `pi-theme` cookie 并渲染到 `<html data-theme>`。服务端与首帧一致 → 无水合错配、无白闪。（因此 `/` 是动态渲染，正常。）
+- **主题壳客户端渲染**：`AppThemeRoot` 用 `dynamic(..., { ssr: false })`。原因：antd-style/emotion 在 Next App Router 下服务端与客户端样式注入不一致，直接 SSR 会 "Hydration failed"。首屏底色由 `globals.css` + `<html data-theme>` 兜底。
+- **切换动画用 View Transitions**：`document.startViewTransition(() => flushSync(update))` 对整页做 ~280ms 交叉淡入；不支持的浏览器降级为"统一颜色过渡"；`prefers-reduced-motion` 时直接切换。
+- **切换时务必处理 CSS transition**：body 背景是瞬切（0s）、antd 组件默认 `transition: all 0.2s`，不同步 = 错位闪烁。用 View Transitions 时给真实 DOM 注入 `transition:none!important`（窗口约 400ms，需覆盖 antd-style 重新生成样式的 ~100ms），动画交给快照。
+
 ## 三态纪律（每个页面）
 
 - 空：列表为空时的引导态
@@ -37,3 +46,6 @@ description: 'Use for theming with @lobehub/ui tokens, dark/light mode, antd-sty
 
 - 切换主题后局部白块 → 该处用了硬编码颜色，改用 token。
 - 骨架屏跳动 → 骨架结构与真实布局不一致；对照真实渲染调整。
+- 切换深浅色闪烁 → body 瞬切、组件 0.2s 渐变不同步；见上"切换时务必处理 CSS transition"。
+- 控制台 "Hydration failed" → antd-style/emotion 的 SSR 注入不一致；主题壳必须 `dynamic(..., { ssr: false })`。
+- 首屏白闪 → 缺 cookie 驱动的 `<html data-theme>` 或 `globals.css` 兜底底色。

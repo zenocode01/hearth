@@ -1,0 +1,35 @@
+/*
+ * 首屏兜底底色：在 antd-style 注入样式之前，<html> 已有正确底色，避免白闪。
+ * 取值对应 @lobehub/ui 的浅/深色 token（浅色 #f8f8f8 / 深色 #000）。
+ * data-theme 由 layout 依据 cookie 渲染（auto 时用系统媒体查询兜底）。
+ */
+html {
+  background: #f8f8f8;
+}
+
+html[data-theme='dark'] {
+  background: #000;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-theme='auto'] {
+    background: #000;
+  }
+}
+
+/*
+ * 主题切换动画：View Transitions 整页交叉淡入。
+ * 时长/缓动与 components/theme.ts 的 THEME_TRANSITION_MS / EASE 保持一致。
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 280ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
