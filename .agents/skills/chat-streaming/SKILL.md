@@ -39,10 +39,14 @@ npm run mock:llm          # 终端 A：本地 mock（OpenAI 兼容 SSE，端口 
 
 ## 验收（`docs/replica/04` 阶段 1）
 
-- [x] 逐字流式渲染（截图采样：文本长度在 150ms 间隔内递增）
-- [x] Markdown 排版 + 代码高亮（shiki 渲染出 span）
+- [x] 逐字流式渲染（mock 采样：文本长度递增；真实模型：3.6s 出正文并递增）
+- [x] Markdown 排版 + 代码高亮（shiki 渲染出 150 个高亮 span + 复制按钮）
 - [x] 断网 / 错 key / 缺配置有可读错误提示（含"重试"）
-- [ ] 用真实模型跑一遍（待用户填 key）
+- [x] 真实模型（qwen3.8-27b，OpenAI 兼容）实测通过
+
+## 模型备注
+
+- 当前接入的是**推理模型**（`qwen3.8-27b`）：正文前有 3~5 秒思考时间，`completion_tokens_details.reasoning_tokens` 不为 0；UI 目前忽略 reasoning 部分，只渲染正文。若以后要展示"思考中"，读 `message.parts` 里的 reasoning 类型即可。
 
 ## 常见翻车
 
