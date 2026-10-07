@@ -1,24 +1,8 @@
 'use client';
 
-import { Button } from '@lobehub/ui';
+import { Button, Icon } from '@lobehub/ui';
+import { ArrowDown } from 'lucide-react';
 import { memo } from 'react';
-
-const ArrowDown = () => (
-  <svg
-    aria-hidden
-    fill="none"
-    height="16"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth="2"
-    viewBox="0 0 24 24"
-    width="16"
-  >
-    <path d="M12 5v14" />
-    <path d="m19 12-7 7-7-7" />
-  </svg>
-);
 
 interface BackBottomProps {
   onClick: () => void;
@@ -30,7 +14,7 @@ interface BackBottomProps {
 export const BackBottom = memo(({ visible, onClick }: BackBottomProps) => (
   <Button
     aria-label="回到最新"
-    icon={<ArrowDown />}
+    icon={<Icon icon={ArrowDown} size={16} />}
     shape="circle"
     title="回到最新"
     onClick={onClick}

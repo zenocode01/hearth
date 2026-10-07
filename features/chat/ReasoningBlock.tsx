@@ -3,6 +3,7 @@
 import { Block, Icon } from '@lobehub/ui';
 import { Spin } from '@lobehub/ui/base-ui';
 import { ThinkIcon } from '@lobehub/ui/icons';
+import { ChevronDown } from 'lucide-react';
 import { memo, useEffect, useRef, useState } from 'react';
 
 interface ReasoningBlockProps {
@@ -14,23 +15,15 @@ interface ReasoningBlockProps {
 }
 
 const Chevron = ({ open }: { open: boolean }) => (
-  <svg
-    aria-hidden
-    fill="none"
-    height="14"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth="2"
+  <span
     style={{
+      display: 'inline-flex',
       transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
       transition: 'transform 0.2s ease',
     }}
-    viewBox="0 0 24 24"
-    width="14"
   >
-    <path d="m6 9 6 6 6-6" />
-  </svg>
+    <Icon icon={ChevronDown} size={14} />
+  </span>
 );
 
 /**

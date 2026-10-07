@@ -1,26 +1,62 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { Button, Text } from '@lobehub/ui';
+import { Button, Icon, Text } from '@lobehub/ui';
+import { ThinkIcon } from '@lobehub/ui/icons';
+import type { UIMessage } from 'ai';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ThemeControls } from '@/components/ThemeControls';
+import type { ChatMessage, Topic } from '@/lib/db/schema';
 
 import { BackBottom } from './BackBottom';
 import { ChatComposer } from './ChatComposer';
 import { EmptyState } from './EmptyState';
 import { MessageItem } from './MessageItem';
+import { TopicSidebar } from './TopicSidebar';
 
 /** 距底多少像素内算"在底部" */
 const BOTTOM_THRESHOLD = 32;
 
-/** 聊天主视图：顶栏 + 消息列表（含滚动条/回到最新）+ 错误条 + 输入框。 */
+/** 聊天主视图：左侧会话列表 + 顶栏 + 消息列表 + 错误条 + 输入框。 */
 export function ChatView() {
-  const { messages, sendMessage, status, error, stop, clearError, regenerate } = useChat();
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const atBottomRef = useRef(true);
+  const requestStartedAtRef = useRef<number | null>(null);
+  // 刚由本页创建的会话：跳过一次历史加载（否则会把刚发出的消息清空）
+  const skipHistoryForRef = useRef<string | null>(null);
+
+  const refreshTopics = useCallback(async () => {
+    try {
+      const res = await fetch('/api/topics');
+      const data = (await res.json()) as { topics?: Topic[] };
+      setTopics(data.topics ?? []);
+    } catch {
+      /* 列表拉取失败不阻塞聊天 */
+    }
+  }, []);
+
+  const {
+    messages,
+    sendMessage,
+    status,
+    error,
+    stop,
+    clearError,
+    regenerate,
+    setMessages,
+  } = useChat({
+    onFinish: () => void refreshTopics(),
+  });
+
   const busy = status === 'submitted' || status === 'streaming';
 
   const lastMessage = messages[messages.length - 1];
-  // 提交后 → 首条内容（含"推理"）到达前，必须有指示，否则看起来像卡住
   const waitingFirstToken =
     busy &&
     !(
@@ -31,12 +67,55 @@ export function ChatView() {
       )
     );
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [atBottom, setAtBottom] = useState(true);
-  // 用 ref 记录是否在底部：effect 只依赖 messages，避免与平滑滚动互相打断
-  const atBottomRef = useRef(true);
-  // 本次请求的发起时间：用于 AI 消息显示"已深度思考 N 秒"
-  const requestStartedAtRef = useRef<number | null>(null);
+  // 启动：拉会话列表 + 从 URL 恢复当前会话（刷新后仍停在同一个会话）
+  useEffect(() => {
+    void refreshTopics();
+    const id = new URLSearchParams(window.location.search).get('topic');
+    if (id) setActiveTopicId(id);
+  }, [refreshTopics]);
+
+  // 当前会话写回 URL
+  useEffect(() => {
+    window.history.replaceState(null, '', activeTopicId ? `/chat?topic=${activeTopicId}` : '/chat');
+  }, [activeTopicId]);
+
+  // 切换会话：加载历史消息
+  useEffect(() => {
+    if (!activeTopicId) {
+      setMessages([]);
+      return;
+    }
+    if (skipHistoryForRef.current === activeTopicId) {
+      skipHistoryForRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingHistory(true);
+    fetch(`/api/topics/${activeTopicId}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+      .then((data: { messages?: ChatMessage[] }) => {
+        if (cancelled) return;
+        const history: UIMessage[] = (data.messages ?? []).map((row) => ({
+          id: row.id,
+          parts: [{ text: row.content, type: 'text' }],
+          role: row.role,
+        }));
+        setMessages(history);
+        atBottomRef.current = true;
+        setAtBottom(true);
+      })
+      .catch(() => {
+        /* 加载失败保持现状 */
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingHistory(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTopicId, setMessages]);
 
   const scrollToBottom = useCallback((smooth: boolean) => {
     const el = scrollRef.current;
@@ -61,110 +140,195 @@ export function ChatView() {
   }, [messages]);
 
   const handleSend = useCallback(
-    (text: string) => {
-      // 自己发消息时，无论在哪儿都回到最新
+    async (text: string) => {
+      let topicId = activeTopicId;
+
+      // 新会话：先建 topic（标题取首条消息），再带着 topicId 发消息
+      if (!topicId) {
+        try {
+          const res = await fetch('/api/topics', {
+            body: JSON.stringify({ title: text.slice(0, 40) }),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          });
+          const data = (await res.json()) as { topic?: Topic };
+          topicId = data.topic?.id ?? null;
+          if (topicId) {
+            skipHistoryForRef.current = topicId;
+            setActiveTopicId(topicId);
+            void refreshTopics();
+          }
+        } catch {
+          /* 建会话失败也要能聊（只是不落库） */
+        }
+      }
+
       atBottomRef.current = true;
       setAtBottom(true);
       requestStartedAtRef.current = Date.now();
-      void sendMessage({ text });
+      void sendMessage({ text }, topicId ? { body: { topicId } } : undefined);
       requestAnimationFrame(() => scrollToBottom(false));
     },
-    [scrollToBottom, sendMessage],
+    [activeTopicId, refreshTopics, scrollToBottom, sendMessage],
   );
 
   const handleRetry = useCallback(() => {
     clearError();
     requestStartedAtRef.current = Date.now();
-    void regenerate();
-  }, [clearError, regenerate]);
+    void regenerate({ body: activeTopicId ? { topicId: activeTopicId } : undefined });
+  }, [activeTopicId, clearError, regenerate]);
+
+  const handleCreate = useCallback(() => {
+    stop();
+    clearError();
+    setActiveTopicId(null);
+    setMessages([]);
+  }, [clearError, setMessages, stop]);
+
+  const handleSelect = useCallback(
+    (id: string) => {
+      if (id === activeTopicId) return;
+      stop();
+      clearError();
+      setActiveTopicId(id);
+    },
+    [activeTopicId, clearError, stop],
+  );
+
+  const handleDelete = useCallback(
+    async (id: string) => {
+      await fetch(`/api/topics/${id}`, { method: 'DELETE' });
+      if (id === activeTopicId) {
+        setActiveTopicId(null);
+        setMessages([]);
+      }
+      void refreshTopics();
+    },
+    [activeTopicId, refreshTopics, setMessages],
+  );
+
+  const handleRename = useCallback(
+    async (id: string, title: string) => {
+      await fetch(`/api/topics/${id}`, {
+        body: JSON.stringify({ title }),
+        headers: { 'content-type': 'application/json' },
+        method: 'PATCH',
+      });
+      void refreshTopics();
+    },
+    [refreshTopics],
+  );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
-      {/* 顶栏：主题控件在这里（不悬浮、不遮挡内容）。阶段 3 的 Agent 选择器也放这。 */}
-      <div
-        style={{
-          alignItems: 'center',
-          borderBottom: '1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06))',
-          display: 'flex',
-          flexShrink: 0,
-          justifyContent: 'space-between',
-          padding: '8px 16px',
-        }}
-      >
-        <Text style={{ fontSize: 16, fontWeight: 600 }}>pi-web</Text>
-        <ThemeControls />
-      </div>
+    <div style={{ display: 'flex', height: '100dvh' }}>
+      <TopicSidebar
+        activeId={activeTopicId}
+        topics={topics}
+        onCreate={handleCreate}
+        onDelete={(id) => void handleDelete(id)}
+        onRename={(id, title) => void handleRename(id, title)}
+        onSelect={handleSelect}
+      />
 
-      {/* 消息区：relative 容器承载"回到最新"按钮 */}
-      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-        <div
-          className="pi-scroll"
-          ref={scrollRef}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16,
-            height: '100%',
-            overflowY: 'auto',
-            padding: 16,
-          }}
-          onScroll={handleScroll}
-        >
-          {messages.length === 0 && !busy ? (
-            <EmptyState />
-          ) : (
-            messages.map((message, index) => (
-              <MessageItem
-                key={message.id}
-                message={message}
-                startedAt={
-                  message.role === 'assistant' && index === messages.length - 1
-                    ? (requestStartedAtRef.current ?? undefined)
-                    : undefined
-                }
-              />
-            ))
-          )}
-          {waitingFirstToken && (
-            <Text className="pi-thinking" type="secondary">
-              💭 模型思考中…
-            </Text>
-          )}
-        </div>
-
-        <BackBottom visible={!atBottom} onClick={() => scrollToBottom(true)} />
-      </div>
-
-      {error && (
+      <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minWidth: 0 }}>
+        {/* 顶栏：主题控件在这里（不悬浮、不遮挡内容）。 */}
         <div
           style={{
             alignItems: 'center',
-            background: 'var(--ant-color-error-bg, rgba(255, 77, 79, 0.12))',
-            borderRadius: 8,
-            color: 'var(--ant-color-error, #ff4d4f)',
+            borderBottom: '1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06))',
             display: 'flex',
-            fontSize: 13,
-            gap: 12,
+            flexShrink: 0,
             justifyContent: 'space-between',
-            margin: '0 12px 4px',
-            padding: '8px 12px',
+            padding: '8px 16px',
           }}
         >
-          <span>{error.message}</span>
-          <span style={{ display: 'flex', flexShrink: 0, gap: 8 }}>
-            {messages.length > 0 && (
-              <Button size="small" onClick={handleRetry}>
-                重试
-              </Button>
-            )}
-            <Button size="small" onClick={clearError}>
-              知道了
-            </Button>
-          </span>
+          <Text style={{ fontSize: 16, fontWeight: 600 }}>pi-web</Text>
+          <ThemeControls />
         </div>
-      )}
 
-      <ChatComposer busy={busy} onSend={handleSend} onStop={stop} />
+        {/* 消息区：relative 容器承载"回到最新"按钮 */}
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          <div
+            className="pi-scroll"
+            ref={scrollRef}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              height: '100%',
+              overflowY: 'auto',
+              padding: 16,
+            }}
+            onScroll={handleScroll}
+          >
+            {messages.length === 0 && !busy && !loadingHistory ? (
+              <EmptyState />
+            ) : (
+              messages.map((message, index) => (
+                <MessageItem
+                  key={message.id}
+                  message={message}
+                  startedAt={
+                    message.role === 'assistant' && index === messages.length - 1
+                      ? (requestStartedAtRef.current ?? undefined)
+                      : undefined
+                  }
+                />
+              ))
+            )}
+            {waitingFirstToken && (
+              <span
+                className="pi-thinking"
+                style={{
+                  alignItems: 'center',
+                  color: 'var(--ant-color-text-secondary, rgba(0, 0, 0, 0.45))',
+                  display: 'inline-flex',
+                  gap: 6,
+                }}
+              >
+                <Icon icon={ThinkIcon} size={14} />
+                模型思考中…
+              </span>
+            )}
+            {loadingHistory && (
+              <Text type="secondary">正在加载历史消息…</Text>
+            )}
+          </div>
+
+          <BackBottom visible={!atBottom} onClick={() => scrollToBottom(true)} />
+        </div>
+
+        {error && (
+          <div
+            style={{
+              alignItems: 'center',
+              background: 'var(--ant-color-error-bg, rgba(255, 77, 79, 0.12))',
+              borderRadius: 8,
+              color: 'var(--ant-color-error, #ff4d4f)',
+              display: 'flex',
+              fontSize: 13,
+              gap: 12,
+              justifyContent: 'space-between',
+              margin: '0 12px 4px',
+              padding: '8px 12px',
+            }}
+          >
+            <span>{error.message}</span>
+            <span style={{ display: 'flex', flexShrink: 0, gap: 8 }}>
+              {messages.length > 0 && (
+                <Button size="small" onClick={handleRetry}>
+                  重试
+                </Button>
+              )}
+              <Button size="small" onClick={clearError}>
+                知道了
+              </Button>
+            </span>
+          </div>
+        )}
+
+        <ChatComposer busy={busy} onSend={(text) => void handleSend(text)} onStop={stop} />
+      </div>
     </div>
   );
 }

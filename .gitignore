@@ -14,8 +14,11 @@ out/
 next-env.d.ts
 
 # SQLite 数据（阶段 2 起）
+data/
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 
 # 日志与缓存
 *.log

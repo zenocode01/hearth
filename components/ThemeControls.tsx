@@ -1,15 +1,24 @@
 'use client';
 
-import { Flexbox, Segmented, Text } from '@lobehub/ui';
+import { Flexbox, Icon, Segmented, Text } from '@lobehub/ui';
+import { MonitorCog, Moon, Sun, type LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import type { ThemeMode } from './theme';
 import { useThemeControls } from './themeContext';
 import type { ThemeTransitionEffect } from './themeTransition';
 
-const MODE_OPTIONS: Array<{ label: string; value: ThemeMode }> = [
-  { label: '🌗 跟随系统', value: 'auto' },
-  { label: '☀️ 浅色', value: 'light' },
-  { label: '🌙 深色', value: 'dark' },
+const modeOption = (icon: LucideIcon, label: string): ReactNode => (
+  <span style={{ alignItems: 'center', display: 'inline-flex', gap: 6 }}>
+    <Icon icon={icon} size={14} />
+    {label}
+  </span>
+);
+
+const MODE_OPTIONS: Array<{ label: ReactNode; value: ThemeMode }> = [
+  { label: modeOption(MonitorCog, '跟随系统'), value: 'auto' },
+  { label: modeOption(Sun, '浅色'), value: 'light' },
+  { label: modeOption(Moon, '深色'), value: 'dark' },
 ];
 
 const EFFECT_OPTIONS: Array<{ label: string; value: ThemeTransitionEffect }> = [

@@ -5,10 +5,22 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from 'ai';
+import { eq } from 'drizzle-orm';
 
+import { getDb } from '@/lib/db';
+import { createId } from '@/lib/db/id';
+import { messages as messagesTable, topics } from '@/lib/db/schema';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
 
 export const maxDuration = 60;
+
+/** 把一条 UIMessage 的文本部分拼起来。 */
+function textOf(message: UIMessage): string {
+  return message.parts
+    .map((part) => (part.type === 'text' ? part.text : ''))
+    .join('')
+    .trim();
+}
 
 /** 把底层错误翻译成用户可读的提示（验收项：错 key / 断网必须有可读错误）。 */
 function humanizeError(error: unknown): string {
@@ -47,11 +59,50 @@ export async function POST(req: Request) {
     throw error;
   }
 
-  const { messages }: { messages: UIMessage[] } = await req.json();
+  const {
+    messages: uiMessages,
+    topicId,
+  }: { messages: UIMessage[]; topicId?: string } = await req.json();
+
+  // 落库：本次新发的用户消息（id 天然去重，重复提交不会写两条）
+  if (topicId) {
+    const lastUser = [...uiMessages].reverse().find((message) => message.role === 'user');
+    const text = lastUser ? textOf(lastUser) : '';
+    if (lastUser && text) {
+      try {
+        getDb()
+          .insert(messagesTable)
+          .values({ content: text, createdAt: new Date(), id: lastUser.id, role: 'user', topicId })
+          .onConflictDoNothing()
+          .run();
+      } catch (error) {
+        console.error('[chat] 保存用户消息失败', error);
+      }
+    }
+  }
 
   const result = streamText({
     model,
-    messages: await convertToModelMessages(messages),
+    messages: await convertToModelMessages(uiMessages),
+    // 流式结束后把 AI 回复落库（不阻塞客户端）
+    onEnd: ({ text }) => {
+      if (!topicId || !text.trim()) return;
+      try {
+        const db = getDb();
+        db.insert(messagesTable)
+          .values({
+            content: text,
+            createdAt: new Date(),
+            id: createId('msg'),
+            role: 'assistant',
+            topicId,
+          })
+          .run();
+        db.update(topics).set({ updatedAt: new Date() }).where(eq(topics.id, topicId)).run();
+      } catch (error) {
+        console.error('[chat] 保存 AI 回复失败', error);
+      }
+    },
   });
 
   return createUIMessageStreamResponse({
