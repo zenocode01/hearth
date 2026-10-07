@@ -38,6 +38,19 @@ description: 'Use for theming with @lobehub/ui tokens, dark/light mode, antd-sty
 - 加载：骨架屏，结构与真实布局一致
 - 错误：可读文案 + 重试
 
+**本项目已落地的三态实现（阶段 4）**：
+
+- **统一封装**：`components/AsyncBoundary.tsx`——顺序是 **错误 → 加载 → 空 → 内容**。踩过：把 `empty` 传成无条件节点 → 列表永远不显示（所以它用 `isEmpty` 显式开关，别改成"给了 empty 就是空态"）。错误态带「重试」按钮（`onRetry`）。
+- **骨架延迟出现**：`components/Delayed.tsx`（默认 200ms）——快响应不闪骨架，慢响应才显示（参考 refs 的 `Skeleton/Delayed`）。
+- **骨架要用新 API**：`@lobehub/ui/base-ui` 的 `Skeleton / SkeletonAvatar / SkeletonText`（`<Skeleton animated height radius width />`）。旧的 `@lobehub/ui` 的 `Skeleton.Block` 已标 **deprecated**（是 antd-style 的 Block 包装）。
+- **骨架形状对齐真实布局**：`components/ListSkeleton.tsx`（头像 + 两行）、`features/chat/MessageSkeleton.tsx`（用户气泡 + 助手多行）、`features/agent/AgentEditorSkeleton.tsx`（标题 + 预览卡 + 表单卡）。给骨架元素加 `data-testid`（如 `list-skeleton`），验证时好抓（LobeHub 也这么做）。
+- **刷新要静默**：`refreshTopics({ silent: true })` 这种约定——发送消息/改名/删除后的刷新不闪骨架、失败也不把已有列表换成错误页；只有首次加载显示三态。
+- **首屏（客户端渲染项目的白屏问题）**：页面全部在 `AppThemeRoot`（`dynamic ssr:false`）里 → SSR 输出没有页面内容。解法：`components/BootSplash.tsx` 由 layout **服务端渲染**（HTML 里就能看到"正在启动…"），`AppThemeProvider` 挂载后派发 `pi-app-ready` 事件隐藏它（React state 驱动，不手工动 DOM）；颜色直接在 globals.css 按 `data-theme` 写（那时还没有 antd 变量）。
+- **路由级 loading**：`app/*/loading.tsx` 复用上面的骨架组件（同形状，避免二次闪烁）。
+- **预取**：`router.prefetch()` + 按钮 `onMouseEnter` 预取；**只在生产生效**（Next 文档 prefetching.md："Automatic prefetching runs only in production"），dev 里看不到预取请求是正常的。
+- **包导入优化**：`next.config.ts` 的 `experimental.optimizePackageImports: ['@lobehub/icons', '@lobehub/ui']`（lucide-react/antd 已在默认清单）。**改 next.config 会触发 dev server 自动重启**，且该优化重启后才生效。
+- **验证三态的土办法**：浏览器里注入 `window.fetch` 补丁（延迟 → 看骨架；reject → 看错误态）+ **客户端导航**（`history.back/forward` 是整页加载会清掉补丁，要用页面内的按钮/链接跳转），可复现"慢网络/断网"。截图工具需要桌面窗口可见，否则改用 DOM 断言。
+
 ## 验收（`docs/replica/04` 阶段 4）
 
 - [ ] 深浅色切换正常，无残留白块
