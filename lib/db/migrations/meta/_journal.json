@@ -15,6 +15,13 @@
       "when": 1791358411258,
       "tag": "0001_add_message_reasoning",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791363889927,
+      "tag": "0002_add_agents_and_topic_agent",
+      "breakpoints": true
     }
   ]
 }

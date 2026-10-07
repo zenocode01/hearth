@@ -9,7 +9,7 @@ import { eq } from 'drizzle-orm';
 
 import { getDb } from '@/lib/db';
 import { createId } from '@/lib/db/id';
-import { messages as messagesTable, topics } from '@/lib/db/schema';
+import { agents, messages as messagesTable, topics } from '@/lib/db/schema';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
 
 export const maxDuration = 60;
@@ -47,9 +47,27 @@ function humanizeError(error: unknown): string {
 
 export async function POST(req: Request) {
   const requestStartedAt = Date.now();
+
+  const {
+    messages: uiMessages,
+    topicId,
+    agentId,
+  }: { messages: UIMessage[]; topicId?: string; agentId?: string } = await req.json();
+
+  const db = getDb();
+  // 会话自身的 Agent 优先于请求携带的（换人设立即生效：每次都按 id 实时读库）
+  let effectiveAgentId = agentId ?? null;
+  if (topicId) {
+    const topic = db.select().from(topics).where(eq(topics.id, topicId)).get();
+    if (topic?.agentId) effectiveAgentId = topic.agentId;
+  }
+  const agent = effectiveAgentId
+    ? (db.select().from(agents).where(eq(agents.id, effectiveAgentId)).get() ?? null)
+    : null;
+
   let model;
   try {
-    model = createChatModel();
+    model = createChatModel(agent?.model);
   } catch (error) {
     if (error instanceof MissingLlmConfigError) {
       return new Response(
@@ -60,19 +78,13 @@ export async function POST(req: Request) {
     throw error;
   }
 
-  const {
-    messages: uiMessages,
-    topicId,
-  }: { messages: UIMessage[]; topicId?: string } = await req.json();
-
   // 落库：本次新发的用户消息（id 天然去重，重复提交不会写两条）
   if (topicId) {
     const lastUser = [...uiMessages].reverse().find((message) => message.role === 'user');
     const text = lastUser ? textOf(lastUser) : '';
     if (lastUser && text) {
       try {
-        getDb()
-          .insert(messagesTable)
+        db.insert(messagesTable)
           .values({ content: text, createdAt: new Date(), id: lastUser.id, role: 'user', topicId })
           .onConflictDoNothing()
           .run();
@@ -84,7 +96,10 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model,
+    // v7 不允许在 messages 里放 system 消息，人设走 instructions
+    instructions: agent?.systemPrompt ?? undefined,
     messages: await convertToModelMessages(uiMessages),
+    temperature: agent?.temperature ?? undefined,
   });
 
   return createUIMessageStreamResponse({
@@ -109,7 +124,6 @@ export async function POST(req: Request) {
         if (!text && !reasoning) return;
 
         try {
-          const db = getDb();
           db.insert(messagesTable)
             .values({
               content: text,

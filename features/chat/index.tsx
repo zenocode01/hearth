@@ -1,14 +1,15 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { Button, Icon, Text, copyToClipboard } from '@lobehub/ui';
+import { Button, Icon, Select, Text, copyToClipboard } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
 import { ThinkIcon } from '@lobehub/ui/icons';
 import type { UIMessage } from 'ai';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ThemeControls } from '@/components/ThemeControls';
-import type { ChatMessage, Topic } from '@/lib/db/schema';
+import type { Agent, ChatMessage, Topic } from '@/lib/db/schema';
 
 import { BackBottom } from './BackBottom';
 import { ChatComposer } from './ChatComposer';
@@ -23,10 +24,14 @@ const BOTTOM_THRESHOLD = 32;
 /** 聊天主视图：左侧会话列表 + 顶栏 + 消息列表 + 错误条 + 输入框。 */
 export function ChatView() {
   const [topics, setTopics] = useState<Topic[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   /** 输入框草稿（受控：支持"放回输入框"） */
   const [draft, setDraft] = useState('');
+
+  const router = useRouter();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -42,6 +47,16 @@ export function ChatView() {
       setTopics(data.topics ?? []);
     } catch {
       /* 列表拉取失败不阻塞聊天 */
+    }
+  }, []);
+
+  const refreshAgents = useCallback(async () => {
+    try {
+      const res = await fetch('/api/agents');
+      const data = (await res.json()) as { agents?: Agent[] };
+      setAgents(data.agents ?? []);
+    } catch {
+      /* 忽略 */
     }
   }, []);
 
@@ -71,12 +86,37 @@ export function ChatView() {
       )
     );
 
-  // 启动：拉会话列表 + 从 URL 恢复当前会话（刷新后仍停在同一个会话）
+  // 启动：拉会话列表 + Agent 列表 + 从 URL 恢复当前会话（刷新后仍停在同一个会话）
   useEffect(() => {
     void refreshTopics();
+    void refreshAgents();
     const id = new URLSearchParams(window.location.search).get('topic');
     if (id) setActiveTopicId(id);
-  }, [refreshTopics]);
+  }, [refreshAgents, refreshTopics]);
+
+  // 当前会话使用哪个 Agent（由会话记录决定；新建会话时用选择器里的值）
+  useEffect(() => {
+    if (!activeTopicId) return;
+    const topic = topics.find((item) => item.id === activeTopicId);
+    if (topic) setActiveAgentId(topic.agentId ?? null);
+  }, [activeTopicId, topics]);
+
+  /** 切换 Agent：已有会话则落库（换人设立即生效），否则记在本地等建会话时带上。 */
+  const handleAgentChange = useCallback(
+    async (agentId: string) => {
+      const next = agentId || null;
+      setActiveAgentId(next);
+      if (activeTopicId) {
+        await fetch(`/api/topics/${activeTopicId}`, {
+          body: JSON.stringify({ agentId: next }),
+          headers: { 'content-type': 'application/json' },
+          method: 'PATCH',
+        });
+        void refreshTopics();
+      }
+    },
+    [activeTopicId, refreshTopics],
+  );
 
   // 当前会话写回 URL
   useEffect(() => {
@@ -160,7 +200,7 @@ export function ChatView() {
     if (!topicId) {
       try {
         const res = await fetch('/api/topics', {
-          body: JSON.stringify({ title: text.slice(0, 40) }),
+          body: JSON.stringify({ agentId: activeAgentId ?? undefined, title: text.slice(0, 40) }),
           headers: { 'content-type': 'application/json' },
           method: 'POST',
         });
@@ -180,9 +220,12 @@ export function ChatView() {
     atBottomRef.current = true;
     setAtBottom(true);
     requestStartedAtRef.current = Date.now();
-    void sendMessage({ text }, topicId ? { body: { topicId } } : undefined);
+    void sendMessage(
+      { text },
+      { body: { agentId: activeAgentId ?? undefined, topicId: topicId ?? undefined } },
+    );
     requestAnimationFrame(() => scrollToBottom(false));
-  }, [activeTopicId, draft, refreshTopics, scrollToBottom, sendMessage]);
+  }, [activeAgentId, activeTopicId, draft, refreshTopics, scrollToBottom, sendMessage]);
 
   /** 消息操作：复制 / 放回输入框 / 重新生成 / 删除。 */
   const handleMessageAction = useCallback(
@@ -317,7 +360,25 @@ export function ChatView() {
             padding: '8px 16px',
           }}
         >
-          <Text style={{ fontSize: 16, fontWeight: 600 }}>pi-web</Text>
+          <span style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
+            <Text style={{ fontSize: 16, fontWeight: 600 }}>pi-web</Text>
+            <Select
+              options={[
+                { label: '默认 Agent', value: '' },
+                ...agents.map((agent) => ({
+                  label: `${agent.avatar ?? '😀'} ${agent.name}`,
+                  value: agent.id,
+                })),
+              ]}
+              size="small"
+              style={{ minWidth: 150 }}
+              value={activeAgentId ?? ''}
+              onChange={(value) => void handleAgentChange(value as string)}
+            />
+            <Button size="small" onClick={() => router.push('/agents')}>
+              管理 Agent
+            </Button>
+          </span>
           <ThemeControls />
         </div>
 

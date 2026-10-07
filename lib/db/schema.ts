@@ -1,9 +1,27 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+
+/** Agent（"AI 员工"）：人设 / 头像 / 模型 / 温度。 */
+export const agents = sqliteTable('agents', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  /** 头像：一个 emoji（用 FluentEmoji 渲染） */
+  avatar: text('avatar'),
+  /** 人设（系统提示词） */
+  systemPrompt: text('system_prompt'),
+  /** 模型名；空 = 用 .env.local 里的默认模型 */
+  model: text('model'),
+  /** 温度；空 = 用接口默认 */
+  temperature: real('temperature'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
 
 /** 会话（话题）表：一条对话一个 topic。 */
 export const topics = sqliteTable('topics', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
+  /** 该会话使用的 Agent；Agent 删除后置空（回到默认） */
+  agentId: text('agent_id').references(() => agents.id, { onDelete: 'set null' }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
@@ -27,5 +45,6 @@ export const messages = sqliteTable(
   (table) => [index('messages_topic_id_created_at_idx').on(table.topicId, table.createdAt)],
 );
 
+export type Agent = typeof agents.$inferSelect;
 export type Topic = typeof topics.$inferSelect;
 export type ChatMessage = typeof messages.$inferSelect;

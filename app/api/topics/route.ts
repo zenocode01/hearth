@@ -10,11 +10,15 @@ export function GET() {
   return Response.json({ topics: rows });
 }
 
-/** POST /api/topics —— 新建会话（标题取首条消息前 40 字）。 */
+/** POST /api/topics —— 新建会话（标题取首条消息前 40 字，可带 Agent）。 */
 export async function POST(req: Request) {
-  const { title } = (await req.json().catch(() => ({}))) as { title?: string };
+  const { title, agentId } = (await req.json().catch(() => ({}))) as {
+    agentId?: string;
+    title?: string;
+  };
   const now = new Date();
   const topic = {
+    agentId: agentId?.trim() || null,
     createdAt: now,
     id: createId('top'),
     title: (title?.trim() || '新对话').slice(0, 40),

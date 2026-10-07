@@ -14,8 +14,8 @@ export class MissingLlmConfigError extends Error {
   }
 }
 
-/** 按 .env.local 创建聊天模型（provider 与模型都不写死）。 */
-export function createChatModel(): LanguageModel {
+/** 按 .env.local 创建聊天模型（provider 与模型都不写死）；模型名可被 Agent 覆盖。 */
+export function createChatModel(modelOverride?: string | null): LanguageModel {
   const result = readLlmConfig();
   if (!result.ok) throw new MissingLlmConfigError(result.missing);
 
@@ -25,5 +25,5 @@ export function createChatModel(): LanguageModel {
     apiKey: result.config.apiKey,
   });
 
-  return provider.chatModel(result.config.model);
+  return provider.chatModel(modelOverride?.trim() || result.config.model);
 }

@@ -1,34 +1,29 @@
 ---
 name: agent-management
-description: 'Use for the agents table, Agent Builder form, agent list, and per-agent persona/model/temperature. Blueprint L1-3, roadmap phase 3.'
+description: 'Use for the agents table, Agent Builder form, agent list, agent selector and per-agent persona/model/temperature. Blueprint L1-3, roadmap phase 3.'
 ---
 
 # Agent 管理（L1-3）
 
-多个"AI 员工"：名字 / 头像 / 人设（系统提示词）/ 模型 / 温度，各自独立。
+已落地（阶段 3）：多个人设（名字/头像/人设/模型/温度）+ 聊天页选择器 + 改人设立即生效。
 
-## 参考点（学思路，不抄代码）
+## 已落地结构
 
-- `refs/lobe-chat/src/features/AgentBuilder/` —— 字段与交互
-- `refs/lobe-chat/.agents/skills/zustand/SKILL.md` —— 域 store 划分思想（我们起步用组件状态/SWR，量大再拆）
-- `refs/lobe-chat/.agents/skills/modal/SKILL.md` —— 表单弹窗的函数式组织思想
-- `refs/lobe-chat/.agents/skills/ux/SKILL.md` —— 表单三态与反馈规范
+- **表**：`agents(id, name, avatar, system_prompt, model, temperature, created_at, updated_at)`；`topics.agent_id`（可空，`ON DELETE SET NULL`——删 Agent 后会话回到默认）。
+- **API**：`GET/POST /api/agents`、`GET/PATCH/DELETE /api/agents/[id]`、`POST /api/agents/test`（**无状态**：直接用表单里的配置试一句，未保存也能测）、`GET /api/models`（从 provider 的 `/models` 拉列表，拉不到就退化成只有"默认"）。
+- **页面**：`/agents` 列表（编辑/删除两段确认）、`/agents/new`、`/agents/[id]`（`features/agent/`）。
+- **聊天接入**：顶栏 `Select` 选 Agent + "管理 Agent"；新建会话时带上 `agentId`，已有会话切换 Agent 走 `PATCH /api/topics/[id]`；请求体带 `agentId`。
 
-## 简化版做法
+## 关键坑（都踩过）
 
-1. `agents` 表：id / name / avatar / systemPrompt / modelName / temperature / createdAt。
-2. `app/agents/`：列表页 + 新建/编辑页（表单：名称、头像、系统提示词多行文本、模型下拉、温度滑杆、"测试"按钮）。
-3. 聊天页顶部加 Agent 选择器；发送时把所选 Agent 的 systemPrompt 拼进请求（见 `chat-streaming`）。
-4. "测试"按钮：发一句固定问题，验证人设生效。
-
-## 注意
-
-- systemPrompt 是大文本字段，不要提前拆成复杂结构——等真正有编辑需求再说。
-- 头像：本地文件或 emoji 起步，不接对象存储。
-- 换 Agent 立即生效；不要缓存旧 Agent 的设定。
+- **AI SDK v7 不允许在 `messages` 里放 system 消息**：会报 `AI_InvalidPromptError: System messages are not allowed...`。人设要走 **`instructions`** 选项（`generateText` / `streamText` 都一样）。
+- **PATCH 必须只更新显式字段**：用"全量归一化"（缺省字段给默认值）会把没传的 name/avatar 冲成默认值——只改人设就会把 Agent 改名。见 `lib/agents/normalize.ts` 的 `normalizeAgentPatch`。
+- **Next 路由文件不能导出额外函数**：把归一化逻辑放到 `lib/agents/normalize.ts`（否则 `.next/types` 类型检查报 `does not satisfy the constraint`）。
+- **人设"立即生效"靠实时读库**：聊天时按 `topic.agentId ?? body.agentId` 每次都从库里读 Agent，不做缓存；所以改完人设下一条就变。
+- **模型可被 Agent 覆盖**：`createChatModel(agent?.model)`；为空则用 `.env.local` 的默认模型。
 
 ## 验收（`docs/replica/04` 阶段 3）
 
-- [ ] 建"资深后端"和"段子手"，各问同一个问题，回答风格明显不同
-- [ ] 改完人设立刻生效
-- [ ] 头像能换
+- [x] "资深后端工程师"（温度 0.2）与"段子手"（温度 1.2）问同一问题，回答风格明显不同（一个"结论+要点 1/2/3"，一个"图书馆找书"的段子）
+- [x] 改完人设立即生效（同一会话里把人设改成"只回复收到"，下一条回复就是"收到"）
+- [x] 头像能换（emoji 输入 + 预设快选，`FluentEmoji` 渲染）

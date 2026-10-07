@@ -23,18 +23,28 @@ export async function GET(_req: Request, { params }: Params) {
   return Response.json({ messages: rows, topic });
 }
 
-/** PATCH —— 改名。 */
+/** PATCH —— 改名 / 换 Agent。 */
 export async function PATCH(req: Request, { params }: Params) {
   const { id } = await params;
-  const { title } = (await req.json().catch(() => ({}))) as { title?: string };
-  const clean = String(title ?? '').trim();
-  if (!clean) return Response.json({ error: '标题不能为空' }, { status: 400 });
+  const { title, agentId } = (await req.json().catch(() => ({}))) as {
+    agentId?: string | null;
+    title?: string;
+  };
 
-  getDb()
-    .update(topics)
-    .set({ title: clean.slice(0, 80), updatedAt: new Date() })
-    .where(eq(topics.id, id))
-    .run();
+  const patch: { agentId?: string | null; title?: string; updatedAt: Date } = {
+    updatedAt: new Date(),
+  };
+
+  if (typeof title === 'string') {
+    const clean = title.trim();
+    if (!clean) return Response.json({ error: '标题不能为空' }, { status: 400 });
+    patch.title = clean.slice(0, 80);
+  }
+  if (agentId !== undefined) {
+    patch.agentId = agentId?.trim() || null;
+  }
+
+  getDb().update(topics).set(patch).where(eq(topics.id, id)).run();
 
   return Response.json({ ok: true });
 }
