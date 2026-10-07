@@ -18,6 +18,12 @@ description: 'Use for the agents table, Agent Builder form, agent list, agent se
 
 ## 关键坑（都踩过）
 
+- **品牌头像**：`agents.avatar` 存 `icon:<key>`（如 `icon:opencode`）→ `AgentAvatar` 渲染 `@lobehub/icons` 的品牌 logo（`Icon.Avatar`：品牌色底 + 白色 glyph，`shape="square"`）。清单在 `features/agent/agentIcons.tsx`（13 个，参考 refs 的 heterogeneous-agents 映射）。CLI 运行方式下编辑页有「品牌图标」选择行；点 CLI 预设会顺带把头像设为该品牌（当前是默认 emoji 或已是品牌图标时才动）。
+  - 类型坑：`IconType`（根导出）只是**单色图标**，没有 `.Avatar` / `.Combine` / `.Text`；复合类型用某个品牌组件自己的类型（我们统一 `type BrandIcon = typeof Pi`，各品牌结构一致）。
+  - 坑：EmojiPicker 收到 `icon:xxx` 会渲染成 `IC`（它认不出），品牌头像时 `value` 要回落到默认表情。
+  - 坑：lobe-icons 的 Mono SVG 里带 `<title>Pi</title>`，所以 `button.textContent` 是 `"PiPi"`——写 DOM 查询/测试时别用 `=== 'OpenCode'`。
+  - 图标不依赖 CDN：LobeHub 那边还可以用 `getLobeIconCDN(id, { format: 'avatar' })` 取远程头像图，我们直接渲染组件（离线可用）。
+
 - **base-ui Popover 的触发器不能是 `<button>`**：用 lobe-ui 的 `Button` 当触发器会报 `Base UI: A component that acts as a button expected a non-<button>...`。要 `nativeButton={false}` + 非 button 触发器（`Block` / div）。参考 `SidebarHeaderSelectPopover` 的写法。
 - **选完要自己关闭面板**：LobeHub 靠路由跳转关闭；我们不跳路由，所以 Popover 要**受控**（`open` + `onOpenChange`），选中时 `setOpen(false)`。
 

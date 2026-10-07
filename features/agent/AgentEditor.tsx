@@ -14,6 +14,7 @@ import {
   primaryColorsSwatches,
 } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
+import { ClaudeCode, OpenCode, Pi } from '@lobehub/icons';
 import { Slider } from 'antd';
 import { ArrowLeft, Bot, Check, FlaskConical, Terminal } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -22,22 +23,32 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { Agent } from '@/lib/db/schema';
 
 import { AgentAvatar } from './AgentAvatar';
+import { AGENT_ICON_OPTIONS, ICON_AVATAR_PREFIX, getAgentIconOption } from './agentIcons';
 
 interface AgentEditorProps {
   /** 'new' 表示新建 */
   id: string;
 }
 
-/** 外部 CLI 的常用预设（占位符见下方说明） */
+/** 外部 CLI 的常用预设（占位符见下方说明）；iconKey 用于「选预设顺便把品牌 logo 设成头像」 */
 const CLI_PRESETS = [
-  { label: 'Pi', value: 'pi -p --mode json --system-prompt "{{systemPrompt}}" "{{prompt}}"' },
+  {
+    Icon: Pi,
+    iconKey: 'pi',
+    label: 'Pi',
+    value: 'pi -p --mode json --system-prompt "{{systemPrompt}}" "{{prompt}}"',
+  },
   {
     // opencode 默认和桌面端共用数据目录会互抢（报「Database is not empty and has no session table」），
     // 用 XDG_DATA_HOME 给它一份独立数据目录；%LOCALAPPDATA% 由运行器展开
+    Icon: OpenCode,
+    iconKey: 'opencode',
     label: 'OpenCode',
     value: 'XDG_DATA_HOME=%LOCALAPPDATA%\\pi-web opencode run "{{prompt}}"',
   },
   {
+    Icon: ClaudeCode,
+    iconKey: 'claude-code',
     label: 'Claude Code',
     value: 'claude -p --append-system-prompt "{{systemPrompt}}" "{{prompt}}"',
   },
@@ -197,7 +208,8 @@ export function AgentEditor({ id }: AgentEditorProps) {
               allowUpload={false}
               shape="square"
               size={48}
-              value={avatar}
+              // 品牌图标（icon:xxx）emoji 选择器认不出，回落到默认表情；点它即切回 emoji
+              value={getAgentIconOption(avatar) ? '😀' : avatar}
               onChange={(emoji) => setAvatar(emoji)}
             />
           </Field>
@@ -219,6 +231,39 @@ export function AgentEditor({ id }: AgentEditorProps) {
             </Field>
           </Flexbox>
         </Flexbox>
+
+        {runtime === 'cli' && (
+          <Field label="品牌图标（外部 Agent 的 logo）">
+            <Flexbox gap={8} horizontal style={{ flexWrap: 'wrap' }}>
+              {AGENT_ICON_OPTIONS.map(({ Icon: BrandIcon, key, label }) => {
+                const value = `${ICON_AVATAR_PREFIX}${key}`;
+                const active = avatar === value;
+                const iconSize = 30;
+                return (
+                  <div
+                    key={key}
+                    role="button"
+                    title={label}
+                    style={{
+                      border: `2px solid ${active ? 'var(--ant-color-primary, #1677ff)' : 'transparent'}`,
+                      borderRadius: Math.round(iconSize * 0.28) + 2,
+                      cursor: 'pointer',
+                      lineHeight: 0,
+                      padding: 1,
+                    }}
+                    onClick={() => setAvatar(value)}
+                  >
+                    <BrandIcon.Avatar
+                      shape="square"
+                      size={iconSize}
+                      style={{ borderRadius: Math.round(iconSize * 0.28) }}
+                    />
+                  </div>
+                );
+              })}
+            </Flexbox>
+          </Field>
+        )}
       </Flexbox>
 
       {/* 人设 */}
@@ -292,9 +337,16 @@ export function AgentEditor({ id }: AgentEditorProps) {
               {CLI_PRESETS.map((preset) => (
                 <Button
                   key={preset.label}
+                  icon={<preset.Icon size={14} />}
                   size="small"
                   title={preset.value}
-                  onClick={() => setCliCommand(preset.value)}
+                  onClick={() => {
+                    setCliCommand(preset.value);
+                    // 头像还是默认 emoji（或已是品牌图标）时，顺便换成这个 Agent 的 logo
+                    if (!avatar || avatar === '😀' || avatar.startsWith(ICON_AVATAR_PREFIX)) {
+                      setAvatar(`${ICON_AVATAR_PREFIX}${preset.iconKey}`);
+                    }
+                  }}
                 >
                   {preset.label}
                 </Button>
