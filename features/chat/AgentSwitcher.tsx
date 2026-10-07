@@ -106,7 +106,7 @@ export const AgentSwitcher = memo(
                 avatar={agent.avatar ?? '😀'}
                 background={agent.backgroundColor}
                 key={agent.id}
-                subtitle={agent.model ?? '默认模型'}
+                subtitle={agent.runtime === 'cli' ? '外部 CLI' : (agent.model ?? '默认模型')}
                 title={agent.name}
                 onClick={() => select(agent.id)}
               />

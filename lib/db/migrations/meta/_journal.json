@@ -29,6 +29,13 @@
       "when": 1791366647042,
       "tag": "0003_add_agent_background_color",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791374152630,
+      "tag": "0004_add_agent_cli_runtime",
+      "breakpoints": true
     }
   ]
 }

@@ -10,9 +10,13 @@ export const agents = sqliteTable('agents', {
   backgroundColor: text('background_color'),
   /** 人设（系统提示词） */
   systemPrompt: text('system_prompt'),
-  /** 模型名；空 = 用 .env.local 里的默认模型 */
+  /** 运行方式：api = 内置模型接口；cli = 外部 CLI agent（pi / opencode / claude…） */
+  runtime: text('runtime').notNull().default('api'),
+  /** CLI 命令模板，支持 {{prompt}} 与 {{systemPrompt}} 占位符（不含占位符时 prompt 走 stdin） */
+  cliCommand: text('cli_command'),
+  /** 模型名；空 = 用 .env.local 里的默认模型（仅 api 方式） */
   model: text('model'),
-  /** 温度；空 = 用接口默认 */
+  /** 温度；空 = 用接口默认（仅 api 方式） */
   temperature: real('temperature'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),

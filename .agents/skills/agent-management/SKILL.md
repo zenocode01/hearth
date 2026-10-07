@@ -27,6 +27,19 @@ description: 'Use for the agents table, Agent Builder form, agent list, agent se
 - **人设"立即生效"靠实时读库**：聊天时按 `topic.agentId ?? body.agentId` 每次都从库里读 Agent，不做缓存；所以改完人设下一条就变。
 - **模型可被 Agent 覆盖**：`createChatModel(agent?.model)`；为空则用 `.env.local` 的默认模型。
 
+## 外部 CLI Agent（参考 refs 的 heterogeneous agents）
+
+Agent 的**运行方式**可以是「内置模型 API」或「外部 CLI」——把消息交给本机的命令行 agent（pi / opencode / claude…）执行，stdout 流式回吐到聊天里。
+
+- **表**：`agents.runtime`（`'api' | 'cli'`，默认 api）、`agents.cli_command`（命令模板）。
+- **命令模板**（`lib/llm/cli.ts`）：
+  - `{{prompt}}` → 「人设 + 对话历史 + 本次输入」（模板里没有它时，内容走 **stdin**）
+  - `{{systemPrompt}}` → 人设；模板里没有它时，人设**并进 prompt 开头**
+  - 预设：Pi `pi -p --system-prompt "{{systemPrompt}}" "{{prompt}}"`、OpenCode `opencode run "{{prompt}}"`、Claude Code `claude -p --append-system-prompt "{{systemPrompt}}" "{{prompt}}"`（参考 LobeHub 的 `OPENCODE_BASE_ARGS = ['run','--format','json','--thinking','--auto']` 等）
+- **安全**：自己把模板拆成 argv（`parseCommandTemplate`）后 `spawn(file, args, { shell: false })`，**不走 shell** → 用户输入不会被当成 shell 语法执行。
+- **聊天路由**：`createUIMessageStream({ execute })` 里把 `runCliAgent()` 的 stdout 逐块写成 `text-delta`；`generateId: () => createId('msg')` 保证消息 id 与客户端一致（删除/重新生成照常可用）；`onEnd` 复用同一套落库逻辑。
+- **失败处理**：命令不存在 / 退出码非 0 → 把错误作为正文写进气泡（`> 运行失败：…`），而不是断流。
+
 ## 验收（`docs/replica/04` 阶段 3）
 
 - [x] "资深后端工程师"（温度 0.2）与"段子手"（温度 1.2）问同一问题，回答风格明显不同（一个"结论+要点 1/2/3"，一个"图书馆找书"的段子）

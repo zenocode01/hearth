@@ -1,7 +1,7 @@
 'use client';
 
-import { Button, Center, Flexbox, FluentEmoji, Text, Tooltip } from '@lobehub/ui';
-import { MessageSquare, Plus, SquarePen, Trash2 } from 'lucide-react';
+import { Button, Center, Flexbox, FluentEmoji, Icon, Text, Tooltip } from '@lobehub/ui';
+import { MessageSquare, Plus, SquarePen, Terminal, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -73,10 +73,19 @@ export function AgentList() {
             >
               <AgentAvatar avatar={agent.avatar} background={agent.backgroundColor} size={40} />
               <Flexbox flex={1} gap={2} style={{ minWidth: 0 }}>
-                <Text style={{ fontWeight: 600 }}>{agent.name}</Text>
+                <Flexbox align="center" gap={6} horizontal>
+                  <Text style={{ fontWeight: 600 }}>{agent.name}</Text>
+                  {agent.runtime === 'cli' && (
+                    <Tooltip title="外部 CLI Agent">
+                      <Icon icon={Terminal} size={14} style={{ opacity: 0.55 }} />
+                    </Tooltip>
+                  )}
+                </Flexbox>
                 <Text style={{ fontSize: 12 }} type="secondary">
-                  {agent.model || '默认模型'}
-                  {agent.temperature == null ? '' : ` · 温度 ${agent.temperature}`}
+                  {agent.runtime === 'cli'
+                    ? `外部 CLI · ${agent.cliCommand || '未配置命令'}`
+                    : (agent.model || '默认模型') +
+                      (agent.temperature == null ? '' : ` · 温度 ${agent.temperature}`)}
                 </Text>
                 <Text ellipsis style={{ fontSize: 12 }} type="secondary">
                   {agent.systemPrompt || '（未设置人设）'}

@@ -1,9 +1,11 @@
 import {
   convertToModelMessages,
+  createUIMessageStream,
   createUIMessageStreamResponse,
   streamText,
   toUIMessageStream,
   type UIMessage,
+  type UIMessageStreamOnEndCallback,
 } from 'ai';
 import { eq } from 'drizzle-orm';
 
@@ -11,8 +13,9 @@ import { getDb } from '@/lib/db';
 import { createId } from '@/lib/db/id';
 import { agents, messages as messagesTable, topics } from '@/lib/db/schema';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
+import { buildCliPrompt, runCliAgent } from '@/lib/llm/cli';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /** 把一条 UIMessage 的文本部分拼起来。 */
 function textOf(message: UIMessage): string {
@@ -65,19 +68,6 @@ export async function POST(req: Request) {
     ? (db.select().from(agents).where(eq(agents.id, effectiveAgentId)).get() ?? null)
     : null;
 
-  let model;
-  try {
-    model = createChatModel(agent?.model);
-  } catch (error) {
-    if (error instanceof MissingLlmConfigError) {
-      return new Response(
-        `模型未配置：请在项目根目录的 .env.local 中填写 ${error.missing.join(' / ')}（可参考 .env.example），然后重启 dev server。`,
-        { status: 500 },
-      );
-    }
-    throw error;
-  }
-
   // 落库：本次新发的用户消息（id 天然去重，重复提交不会写两条）
   if (topicId) {
     const lastUser = [...uiMessages].reverse().find((message) => message.role === 'user');
@@ -92,6 +82,107 @@ export async function POST(req: Request) {
         console.error('[chat] 保存用户消息失败', error);
       }
     }
+  }
+
+  /** 流结束后把 AI 回复（正文 + 推理）落库，两条路径共用。 */
+  const persistAssistant: UIMessageStreamOnEndCallback<UIMessage> = ({ responseMessage }) => {
+    if (!topicId) return;
+
+    const joinParts = (type: 'reasoning' | 'text') =>
+      responseMessage.parts
+        .map((part) => (part.type === type ? part.text : ''))
+        .join('')
+        .trim();
+
+    const text = joinParts('text');
+    const reasoning = joinParts('reasoning');
+    if (!text && !reasoning) return;
+
+    try {
+      db.insert(messagesTable)
+        .values({
+          content: text,
+          createdAt: new Date(),
+          // 与客户端内存里的消息 id 一致（见 generateId / generateMessageId）
+          id: responseMessage.id ?? createId('msg'),
+          reasoning: reasoning || null,
+          reasoningMs: reasoning ? Date.now() - requestStartedAt : null,
+          role: 'assistant',
+          topicId,
+        })
+        .run();
+      db.update(topics).set({ updatedAt: new Date() }).where(eq(topics.id, topicId)).run();
+    } catch (error) {
+      console.error('[chat] 保存 AI 回复失败', error);
+    }
+  };
+
+  // ---------- 外部 CLI 型 Agent（pi / opencode / claude …） ----------
+  if (agent?.runtime === 'cli') {
+    const command = agent.cliCommand?.trim();
+    if (!command) {
+      return new Response(
+        '这个 Agent 是「外部 CLI」模式，但还没填命令。去 Agent 编辑页填写，例如：pi -p "{{prompt}}"',
+        { status: 500 },
+      );
+    }
+
+    const lastUser = [...uiMessages].reverse().find((message) => message.role === 'user');
+    const question = lastUser ? textOf(lastUser) : '';
+    const history = uiMessages
+      .filter((message) => message.id !== lastUser?.id)
+      .map((message) => ({ content: textOf(message), role: message.role as 'assistant' | 'user' }))
+      .filter((item) => item.content);
+
+    const cliStream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        const textId = createId('txt');
+        writer.write({ id: textId, type: 'text-start' });
+        try {
+          for await (const chunk of runCliAgent({
+            command,
+            prompt: buildCliPrompt({
+              history,
+              question,
+              // 模板里有 {{systemPrompt}} 就交给 CLI，没有则并进 prompt
+              systemPrompt: command.includes('{{systemPrompt}}') ? null : agent.systemPrompt,
+            }),
+            systemPrompt: agent.systemPrompt,
+          })) {
+            writer.write({ delta: chunk, id: textId, type: 'text-delta' });
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          writer.write({
+            delta: `\n\n> 运行失败：${message}`,
+            id: textId,
+            type: 'text-delta',
+          });
+        }
+        writer.write({ id: textId, type: 'text-end' });
+      },
+      generateId: () => createId('msg'),
+      onEnd: persistAssistant,
+      onError: (error) =>
+        `外部命令执行失败：${error instanceof Error ? error.message : String(error)}`,
+      originalMessages: uiMessages,
+    });
+
+    return createUIMessageStreamResponse({ stream: cliStream });
+  }
+
+  // ---------- 内置模型 API（默认） ----------
+  let model;
+  try {
+    model = createChatModel(agent?.model);
+  } catch (error) {
+    if (error instanceof MissingLlmConfigError) {
+      return new Response(
+        `模型未配置：请在项目根目录的 .env.local 中填写 ${error.missing.join(' / ')}（可参考 .env.example），然后重启 dev server。`,
+        { status: 500 },
+      );
+    }
+    throw error;
   }
 
   const result = streamText({
@@ -110,37 +201,7 @@ export async function POST(req: Request) {
       // 该 id 会随流下发给客户端，因此两端一致（删除 / 重新生成按 id 匹配才有效）
       originalMessages: uiMessages,
       generateMessageId: () => createId('msg'),
-      onEnd: ({ responseMessage }) => {
-        if (!topicId) return;
-
-        const joinParts = (type: 'reasoning' | 'text') =>
-          responseMessage.parts
-            .map((part) => (part.type === type ? part.text : ''))
-            .join('')
-            .trim();
-
-        const text = joinParts('text');
-        const reasoning = joinParts('reasoning');
-        if (!text && !reasoning) return;
-
-        try {
-          db.insert(messagesTable)
-            .values({
-              content: text,
-              createdAt: new Date(),
-              // 与客户端内存里的消息 id 一致（见 generateMessageId）
-              id: responseMessage.id ?? createId('msg'),
-              reasoning: reasoning || null,
-              reasoningMs: reasoning ? Date.now() - requestStartedAt : null,
-              role: 'assistant',
-              topicId,
-            })
-            .run();
-          db.update(topics).set({ updatedAt: new Date() }).where(eq(topics.id, topicId)).run();
-        } catch (error) {
-          console.error('[chat] 保存 AI 回复失败', error);
-        }
-      },
+      onEnd: persistAssistant,
     }),
   });
 }

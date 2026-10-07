@@ -2,8 +2,10 @@
 export interface AgentInput {
   avatar?: string;
   backgroundColor?: string;
+  cliCommand?: string;
   model?: string;
   name?: string;
+  runtime?: 'api' | 'cli';
   systemPrompt?: string;
   temperature?: number | null;
 }
@@ -12,8 +14,10 @@ export function normalizeAgentInput(input: AgentInput) {
   return {
     avatar: input.avatar?.trim() || '😀',
     backgroundColor: input.backgroundColor?.trim() || null,
+    cliCommand: input.cliCommand?.trim() || null,
     model: input.model?.trim() || null,
     name: (input.name ?? '').trim().slice(0, 40) || '未命名 Agent',
+    runtime: input.runtime === 'cli' ? ('cli' as const) : ('api' as const),
     systemPrompt: input.systemPrompt?.trim() || null,
     temperature:
       typeof input.temperature === 'number' && Number.isFinite(input.temperature)
@@ -30,8 +34,10 @@ export function normalizeAgentPatch(input: AgentInput) {
   const patch: {
     avatar?: string;
     backgroundColor?: string | null;
+    cliCommand?: string | null;
     model?: string | null;
     name?: string;
+    runtime?: 'api' | 'cli';
     systemPrompt?: string | null;
     temperature?: number | null;
   } = {};
@@ -40,8 +46,10 @@ export function normalizeAgentPatch(input: AgentInput) {
   if (input.backgroundColor !== undefined) {
     patch.backgroundColor = input.backgroundColor?.trim() || null;
   }
+  if (input.cliCommand !== undefined) patch.cliCommand = input.cliCommand?.trim() || null;
   if (input.model !== undefined) patch.model = input.model?.trim() || null;
   if (input.name !== undefined) patch.name = (input.name ?? '').trim().slice(0, 40) || '未命名 Agent';
+  if (input.runtime !== undefined) patch.runtime = input.runtime === 'cli' ? 'cli' : 'api';
   if (input.systemPrompt !== undefined) patch.systemPrompt = input.systemPrompt?.trim() || null;
   if (input.temperature !== undefined) {
     patch.temperature =

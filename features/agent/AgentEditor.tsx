@@ -5,7 +5,9 @@ import {
   ColorSwatches,
   EmojiPicker,
   Flexbox,
+  Icon,
   Input,
+  Segmented,
   Select,
   Text,
   TextArea,
@@ -13,7 +15,7 @@ import {
 } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
 import { Slider } from 'antd';
-import { ArrowLeft, Check, FlaskConical } from 'lucide-react';
+import { ArrowLeft, Bot, Check, FlaskConical, Terminal } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
@@ -25,6 +27,28 @@ interface AgentEditorProps {
   /** 'new' 表示新建 */
   id: string;
 }
+
+/** 外部 CLI 的常用预设（占位符见下方说明） */
+const CLI_PRESETS = [
+  { label: 'Pi', value: 'pi -p --system-prompt "{{systemPrompt}}" "{{prompt}}"' },
+  { label: 'OpenCode', value: 'opencode run "{{prompt}}"' },
+  {
+    label: 'Claude Code',
+    value: 'claude -p --append-system-prompt "{{systemPrompt}}" "{{prompt}}"',
+  },
+];
+
+const runtimeOption = (icon: typeof Bot, label: string): ReactNode => (
+  <span style={{ alignItems: 'center', display: 'inline-flex', gap: 6 }}>
+    <Icon icon={icon} size={14} />
+    {label}
+  </span>
+);
+
+const RUNTIME_OPTIONS = [
+  { label: runtimeOption(Bot, '内置模型'), value: 'api' },
+  { label: runtimeOption(Terminal, '外部 CLI'), value: 'cli' },
+];
 
 const cardStyle = {
   background: 'var(--ant-color-bg-container, #fff)',
@@ -49,6 +73,8 @@ export function AgentEditor({ id }: AgentEditorProps) {
   const [backgroundColor, setBackgroundColor] = useState('');
   const [name, setName] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [runtime, setRuntime] = useState<'api' | 'cli'>('api');
+  const [cliCommand, setCliCommand] = useState('');
   const [model, setModel] = useState('');
   const [temperature, setTemperature] = useState(0.7);
   const [models, setModels] = useState<string[]>([]);
@@ -68,6 +94,8 @@ export function AgentEditor({ id }: AgentEditorProps) {
         setBackgroundColor(agent.backgroundColor ?? '');
         setName(agent.name);
         setSystemPrompt(agent.systemPrompt ?? '');
+        setRuntime(agent.runtime === 'cli' ? 'cli' : 'api');
+        setCliCommand(agent.cliCommand ?? '');
         setModel(agent.model ?? '');
         setTemperature(agent.temperature ?? 0.7);
       })
@@ -83,8 +111,8 @@ export function AgentEditor({ id }: AgentEditorProps) {
   }, []);
 
   const payload = useCallback(
-    () => ({ avatar, backgroundColor, model, name, systemPrompt, temperature }),
-    [avatar, backgroundColor, model, name, systemPrompt, temperature],
+    () => ({ avatar, backgroundColor, cliCommand, model, name, runtime, systemPrompt, temperature }),
+    [avatar, backgroundColor, cliCommand, model, name, runtime, systemPrompt, temperature],
   );
 
   const save = useCallback(async () => {
@@ -147,7 +175,7 @@ export function AgentEditor({ id }: AgentEditorProps) {
         <Flexbox gap={2} style={{ minWidth: 0 }}>
           <Text style={{ fontSize: 16, fontWeight: 600 }}>{name || '未命名 Agent'}</Text>
           <Text style={{ fontSize: 12 }} type="secondary">
-            {model || '默认模型'} · 温度 {temperature.toFixed(1)}
+            {runtime === 'cli' ? '外部 CLI Agent' : `${model || '默认模型'} · 温度 ${temperature.toFixed(1)}`}
           </Text>
           <Text ellipsis style={{ fontSize: 12 }} type="secondary">
             {systemPrompt || '（未设置人设）'}
@@ -204,34 +232,78 @@ export function AgentEditor({ id }: AgentEditorProps) {
         />
       </Flexbox>
 
-      {/* 模型与参数 */}
+      {/* 运行方式：内置模型 API 或外部 CLI agent */}
       <Flexbox gap={16} style={cardStyle}>
-        <Text style={{ fontSize: 13, fontWeight: 600 }}>模型与参数</Text>
-        <Flexbox align="flex-start" gap={24} horizontal>
-          <Flexbox flex={1}>
-            <Field label="模型">
-              <Select
-                options={[
-                  { label: '默认（.env.local 里的模型）', value: '' },
-                  ...models.map((item) => ({ label: item, value: item })),
-                ]}
-                value={model}
-                onChange={(value) => setModel(value as string)}
-              />
-            </Field>
-          </Flexbox>
-          <Flexbox flex={1}>
-            <Field label={`温度：${temperature.toFixed(1)}`}>
-              <Slider
-                max={2}
-                min={0}
-                step={0.1}
-                value={temperature}
-                onChange={(value) => setTemperature(value as number)}
-              />
-            </Field>
-          </Flexbox>
+        <Flexbox gap={2}>
+          <Text style={{ fontSize: 13, fontWeight: 600 }}>运行方式</Text>
+          <Text style={{ fontSize: 12 }} type="secondary">
+            内置模型走 .env.local 的接口；外部 CLI 把消息交给本机的命令行 agent（pi / opencode / claude…）执行。
+          </Text>
         </Flexbox>
+        <Segmented
+          block
+          options={RUNTIME_OPTIONS}
+          value={runtime}
+          onChange={(value) => setRuntime(value as 'api' | 'cli')}
+        />
+
+        {runtime === 'api' ? (
+          <Flexbox align="flex-start" gap={24} horizontal>
+            <Flexbox flex={1}>
+              <Field label="模型">
+                <Select
+                  options={[
+                    { label: '默认（.env.local 里的模型）', value: '' },
+                    ...models.map((item) => ({ label: item, value: item })),
+                  ]}
+                  value={model}
+                  onChange={(value) => setModel(value as string)}
+                />
+              </Field>
+            </Flexbox>
+            <Flexbox flex={1}>
+              <Field label={`温度：${temperature.toFixed(1)}`}>
+                <Slider
+                  max={2}
+                  min={0}
+                  step={0.1}
+                  value={temperature}
+                  onChange={(value) => setTemperature(value as number)}
+                />
+              </Field>
+            </Flexbox>
+          </Flexbox>
+        ) : (
+          <Flexbox gap={10}>
+            <Field label="命令模板">
+              <TextArea
+                autoSize={{ maxRows: 6, minRows: 3 }}
+                placeholder={'pi -p --system-prompt "{{systemPrompt}}" "{{prompt}}"'}
+                value={cliCommand}
+                onChange={(event) => setCliCommand(event.target.value)}
+              />
+            </Field>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {CLI_PRESETS.map((preset) => (
+                <Button
+                  key={preset.label}
+                  size="small"
+                  title={preset.value}
+                  onClick={() => setCliCommand(preset.value)}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
+            <Text style={{ fontSize: 12 }} type="secondary">
+              {'{{prompt}}'} 会替换成「对话历史 + 本次输入」，{'{{systemPrompt}}'} 替换成人设；模板里没有{' '}
+              {'{{prompt}}'} 时内容从 stdin 传入。
+            </Text>
+            <Text style={{ fontSize: 12 }} type="secondary">
+              命令在本机执行（不走 shell，参数不会被当成 shell 语法）；请确保该 CLI 已装好并已登录。
+            </Text>
+          </Flexbox>
+        )}
       </Flexbox>
 
       {/* 测试结果 */}
