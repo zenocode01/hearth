@@ -1,7 +1,8 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { Button, Icon, Text } from '@lobehub/ui';
+import { Button, Icon, Text, copyToClipboard } from '@lobehub/ui';
+import { toast } from '@lobehub/ui/base-ui';
 import { ThinkIcon } from '@lobehub/ui/icons';
 import type { UIMessage } from 'ai';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -13,6 +14,7 @@ import { BackBottom } from './BackBottom';
 import { ChatComposer } from './ChatComposer';
 import { EmptyState } from './EmptyState';
 import { MessageItem } from './MessageItem';
+import type { MessageActionKey } from './MessageActions';
 import { TopicSidebar } from './TopicSidebar';
 
 /** 距底多少像素内算"在底部" */
@@ -23,6 +25,8 @@ export function ChatView() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  /** 输入框草稿（受控：支持"放回输入框"） */
+  const [draft, setDraft] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -146,37 +150,79 @@ export function ChatView() {
     }
   }, [messages]);
 
-  const handleSend = useCallback(
-    async (text: string) => {
-      let topicId = activeTopicId;
+  const handleSend = useCallback(async () => {
+    const text = draft.trim();
+    if (!text) return;
 
-      // 新会话：先建 topic（标题取首条消息），再带着 topicId 发消息
-      if (!topicId) {
-        try {
-          const res = await fetch('/api/topics', {
-            body: JSON.stringify({ title: text.slice(0, 40) }),
-            headers: { 'content-type': 'application/json' },
-            method: 'POST',
+    let topicId = activeTopicId;
+
+    // 新会话：先建 topic（标题取首条消息），再带着 topicId 发消息
+    if (!topicId) {
+      try {
+        const res = await fetch('/api/topics', {
+          body: JSON.stringify({ title: text.slice(0, 40) }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        });
+        const data = (await res.json()) as { topic?: Topic };
+        topicId = data.topic?.id ?? null;
+        if (topicId) {
+          skipHistoryForRef.current = topicId;
+          setActiveTopicId(topicId);
+          void refreshTopics();
+        }
+      } catch {
+        /* 建会话失败也要能聊（只是不落库） */
+      }
+    }
+
+    setDraft('');
+    atBottomRef.current = true;
+    setAtBottom(true);
+    requestStartedAtRef.current = Date.now();
+    void sendMessage({ text }, topicId ? { body: { topicId } } : undefined);
+    requestAnimationFrame(() => scrollToBottom(false));
+  }, [activeTopicId, draft, refreshTopics, scrollToBottom, sendMessage]);
+
+  /** 消息操作：复制 / 放回输入框 / 重新生成 / 删除。 */
+  const handleMessageAction = useCallback(
+    async (message: UIMessage, key: MessageActionKey) => {
+      const text = message.parts
+        .map((part) => (part.type === 'text' ? part.text : ''))
+        .join('');
+
+      switch (key) {
+        case 'copy': {
+          await copyToClipboard(text);
+          toast.success('已复制到剪贴板');
+          break;
+        }
+        case 'restore': {
+          setDraft(text);
+          requestAnimationFrame(() =>
+            document.querySelector<HTMLTextAreaElement>('textarea')?.focus(),
+          );
+          break;
+        }
+        case 'regenerate': {
+          // 先删库里的旧回复再重新生成，避免刷新后新旧两条都在（必须等删除完成）
+          await fetch(`/api/messages/${message.id}`, { method: 'DELETE' });
+          requestStartedAtRef.current = Date.now();
+          void regenerate({
+            body: activeTopicId ? { topicId: activeTopicId } : undefined,
+            messageId: message.id,
           });
-          const data = (await res.json()) as { topic?: Topic };
-          topicId = data.topic?.id ?? null;
-          if (topicId) {
-            skipHistoryForRef.current = topicId;
-            setActiveTopicId(topicId);
-            void refreshTopics();
-          }
-        } catch {
-          /* 建会话失败也要能聊（只是不落库） */
+          break;
+        }
+        case 'delete': {
+          await fetch(`/api/messages/${message.id}`, { method: 'DELETE' });
+          setMessages((prev) => prev.filter((item) => item.id !== message.id));
+          void refreshTopics();
+          break;
         }
       }
-
-      atBottomRef.current = true;
-      setAtBottom(true);
-      requestStartedAtRef.current = Date.now();
-      void sendMessage({ text }, topicId ? { body: { topicId } } : undefined);
-      requestAnimationFrame(() => scrollToBottom(false));
     },
-    [activeTopicId, refreshTopics, scrollToBottom, sendMessage],
+    [activeTopicId, refreshTopics, regenerate, setMessages],
   );
 
   const handleRetry = useCallback(() => {
@@ -273,8 +319,10 @@ export function ChatView() {
             ) : (
               messages.map((message, index) => (
                 <MessageItem
+                  busy={busy}
                   key={message.id}
                   message={message}
+                  onAction={(target, key) => void handleMessageAction(target, key)}
                   startedAt={
                     message.role === 'assistant' && index === messages.length - 1
                       ? (requestStartedAtRef.current ?? undefined)
@@ -334,7 +382,13 @@ export function ChatView() {
           </div>
         )}
 
-        <ChatComposer busy={busy} onSend={(text) => void handleSend(text)} onStop={stop} />
+        <ChatComposer
+          busy={busy}
+          value={draft}
+          onChange={setDraft}
+          onSend={() => void handleSend()}
+          onStop={stop}
+        />
       </div>
     </div>
   );

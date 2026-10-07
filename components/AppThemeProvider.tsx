@@ -3,6 +3,7 @@
 import 'antd/dist/reset.css';
 
 import { ConfigProvider, ThemeProvider } from '@lobehub/ui';
+import { ToastHost } from '@lobehub/ui/base-ui';
 import * as m from 'motion/react-m';
 import { useCallback, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 
@@ -92,6 +93,7 @@ export function AppThemeProvider({ children, initialMode = 'auto' }: AppThemePro
           theme={{ cssVar: { key: 'pi-vars' } }}
         >
           {children}
+          <ToastHost />
         </ThemeProvider>
       </ConfigProvider>
     </ThemeControlContext.Provider>

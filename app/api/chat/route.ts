@@ -91,7 +91,10 @@ export async function POST(req: Request) {
     stream: toUIMessageStream({
       stream: result.stream,
       onError: humanizeError,
-      // 流式结束后把 AI 回复落库（正文 + 推理过程），不阻塞客户端
+      // 传 originalMessages 进入"持久化模式"，再给 generateMessageId 才会分配 id；
+      // 该 id 会随流下发给客户端，因此两端一致（删除 / 重新生成按 id 匹配才有效）
+      originalMessages: uiMessages,
+      generateMessageId: () => createId('msg'),
       onEnd: ({ responseMessage }) => {
         if (!topicId) return;
 
@@ -111,7 +114,8 @@ export async function POST(req: Request) {
             .values({
               content: text,
               createdAt: new Date(),
-              id: createId('msg'),
+              // 与客户端内存里的消息 id 一致（见 generateMessageId）
+              id: responseMessage.id ?? createId('msg'),
               reasoning: reasoning || null,
               reasoningMs: reasoning ? Date.now() - requestStartedAt : null,
               role: 'assistant',

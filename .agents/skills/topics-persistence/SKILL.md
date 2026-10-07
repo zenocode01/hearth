@@ -31,6 +31,30 @@ description: 'Use for SQLite + Drizzle setup, topics/messages schema, session CR
 - **推理过程也要入库**（否则刷新后思考内容消失，与 LobeHub 不一致）：`messages` 表有 `reasoning`（文本）与 `reasoning_ms`（耗时）。写入点在 `toUIMessageStream({ onEnd: ({ responseMessage }) => ... })` —— 只有这里能拿到**组装好的 `responseMessage.parts`**（含 `text` 与 `reasoning` 两类 part）；`streamText.onEnd` 只有正文文本。历史消息在 `ChatView` 里还原为 `[reasoning part, text part]`，耗时经 `message.metadata.reasoningMs` 传给 `ReasoningBlock` 的 `durationMs`。
 - **新迁移要重启 dev**：`migrate()` 只在建立新连接时执行，而 dev 进程把连接缓存在 `globalThis`；加列后不重启会出现 `no such column`。重启即自动补跑迁移。
 
+## 消息操作（复制 / 放回输入框 / 重新生成 / 删除）
+
+参考 LobeHub 的 `Conversation/Messages/components/MessageActionBar`，取常用动作实现于 `features/chat/MessageActions.tsx`：
+
+- 用 `@lobehub/ui` 的 **`ActionIconGroup`**（items：`{ key, label, icon, disabled, danger }`）+ `copyToClipboard` + `toast`。
+- **`toast` 需要在根节点挂 `ToastHost`**（`components/AppThemeProvider.tsx` 里已挂 `<ToastHost />`），否则不会有任何提示。
+- 悬停显示：`.pi-msg:hover .pi-msg-actions`（触屏用 `@media (hover: none)` 常显）。
+
+### 关键坑：消息 id 必须两端一致
+
+删除 / 重新生成都**按消息 id 匹配**（`DELETE /api/messages/[id]`、`regenerate({ messageId })`），所以落库的 id 必须等于客户端内存里的 id：
+
+```ts
+toUIMessageStream({
+  originalMessages: uiMessages,          // 进入"持久化模式"
+  generateMessageId: () => createId('msg'), // ← 必须给！只传 originalMessages 时响应消息 id 是 undefined
+  onEnd: ({ responseMessage }) => { /* 用 responseMessage.id 落库 */ },
+})
+```
+
+该 id 会随流下发给客户端，两端自然一致。**只传 `originalMessages` 不给 `generateMessageId`** 时 `responseMessage.id` 为 `undefined`，落库走兜底 id → 与客户端不一致 → 删除/重新生成静默失效（UI 看着删了，刷新又回来）。
+
+- **重新生成的顺序**：先 `await` 旧回复的 DELETE，再 `regenerate()`；并发会导致库里留下两条。
+
 ## 验收（`docs/replica/04` 阶段 2）
 
 - [x] 刷新不丢（重载后消息从库里恢复）

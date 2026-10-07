@@ -59,6 +59,23 @@ html[data-theme='dark'] {
   animation: pi-pulse 1.4s ease-in-out infinite;
 }
 
+/* 消息操作栏：默认隐藏，悬停（或触屏）显示 */
+.pi-msg-actions {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.pi-msg:hover .pi-msg-actions,
+.pi-msg:focus-within .pi-msg-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .pi-msg-actions {
+    opacity: 1;
+  }
+}
+
 /* 推理内容展开时的入场动画 */
 @keyframes pi-collapse-in {
   from {

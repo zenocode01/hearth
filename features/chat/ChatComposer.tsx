@@ -1,25 +1,24 @@
 'use client';
 
 import { Button, Flexbox, TextArea } from '@lobehub/ui';
-import { memo, useRef, useState } from 'react';
+import { memo, useRef } from 'react';
 
 interface ChatComposerProps {
-  /** 正在提交或接收流式回复。 */
   busy: boolean;
-  onSend: (text: string) => void;
+  onChange: (value: string) => void;
+  onSend: () => void;
   onStop: () => void;
+  /** 受控草稿（"放回输入框"会改写它） */
+  value: string;
 }
 
 /** 底部输入框：Enter 发送、Shift+Enter 换行；流式中变为停止按钮。 */
-export const ChatComposer = memo(({ busy, onSend, onStop }: ChatComposerProps) => {
-  const [value, setValue] = useState('');
+export const ChatComposer = memo(({ busy, value, onChange, onSend, onStop }: ChatComposerProps) => {
   const composingRef = useRef(false);
+  const canSend = value.trim().length > 0 && !busy;
 
   const submit = () => {
-    const text = value.trim();
-    if (!text || busy) return;
-    onSend(text);
-    setValue('');
+    if (canSend) onSend();
   };
 
   return (
@@ -36,7 +35,7 @@ export const ChatComposer = memo(({ busy, onSend, onStop }: ChatComposerProps) =
         autoSize={{ maxRows: 6, minRows: 1 }}
         placeholder="输入消息，Enter 发送，Shift+Enter 换行"
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => onChange(event.target.value)}
         onCompositionEnd={() => (composingRef.current = false)}
         onCompositionStart={() => (composingRef.current = true)}
         onPressEnter={(event) => {
@@ -51,7 +50,7 @@ export const ChatComposer = memo(({ busy, onSend, onStop }: ChatComposerProps) =
           停止
         </Button>
       ) : (
-        <Button disabled={!value.trim()} type="primary" onClick={submit}>
+        <Button disabled={!canSend} type="primary" onClick={submit}>
           发送
         </Button>
       )}
