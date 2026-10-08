@@ -1,11 +1,12 @@
 'use client';
 
 import { Markdown } from '@lobehub/ui';
-import type { UIMessage } from 'ai';
+import { isToolUIPart, type UIMessage } from 'ai';
 import { memo } from 'react';
 
 import { MessageActions, type MessageActionKey } from './MessageActions';
 import { ReasoningBlock } from './ReasoningBlock';
+import { ToolCard } from './ToolCard';
 
 interface MessageItemProps {
   /** 生成中时禁用"重新生成" */
@@ -18,21 +19,16 @@ interface MessageItemProps {
 }
 
 /**
- * 渲染一条消息：用户为浅色气泡；AI 为推理（可收缩/展开）+ Markdown 正文。
- * 悬停显示操作栏；颜色用 antd 的 CSS 变量（--ant-color-*），随深浅色自动切换。
+ * 渲染一条消息：用户为浅色气泡；AI **按片段顺序**渲染推理块 / 工具卡片 / Markdown 正文
+ * （多步工具调用时的交错顺序与真实过程一致）。悬停显示操作栏；颜色用 antd CSS 变量。
  */
 export const MessageItem = memo(({ message, startedAt, busy, onAction }: MessageItemProps) => {
   const isUser = message.role === 'user';
 
-  const reasoning = message.parts
-    .map((part) => (part.type === 'reasoning' ? part.text : ''))
-    .join('');
   const text = message.parts
     .map((part) => (part.type === 'text' ? part.text : ''))
     .join('');
-
   const hasText = text.trim().length > 0;
-  const hasReasoning = reasoning.trim().length > 0;
   // 历史消息从 metadata 里取已持久化的思考耗时
   const persistedReasoningMs = (message.metadata as { reasoningMs?: number } | undefined)
     ?.reasoningMs;
@@ -60,21 +56,47 @@ export const MessageItem = memo(({ message, startedAt, busy, onAction }: Message
         {isUser ? (
           <span>{text}</span>
         ) : (
-          <>
-            {hasReasoning && (
-              <ReasoningBlock
-                durationMs={persistedReasoningMs}
-                startedAt={startedAt}
-                text={reasoning}
-                thinking={!hasText}
-              />
-            )}
-            {hasText && (
-              <Markdown animated variant="chat">
-                {text}
-              </Markdown>
-            )}
-          </>
+          message.parts.map((part, index) => {
+            if (part.type === 'reasoning') {
+              return part.text.trim() ? (
+                <ReasoningBlock
+                  durationMs={persistedReasoningMs}
+                  key={index}
+                  startedAt={startedAt}
+                  text={part.text}
+                  // 正文还没出现时视为"仍在思考"
+                  thinking={!hasText}
+                />
+              ) : null;
+            }
+
+            if (part.type === 'text') {
+              return part.text ? (
+                <Markdown animated key={index} variant="chat">
+                  {part.text}
+                </Markdown>
+              ) : null;
+            }
+
+            if (isToolUIPart(part)) {
+              const toolName =
+                part.type === 'dynamic-tool' ? part.toolName : part.type.slice('tool-'.length);
+              return (
+                <ToolCard
+                  errorText={part.errorText}
+                  input={part.input}
+                  key={part.toolCallId ?? index}
+                  output={part.output}
+                  state={part.state}
+                  toolCallId={part.toolCallId}
+                  toolName={toolName}
+                />
+              );
+            }
+
+            // step-start 等片段：不渲染（多步边界对用户无意义）
+            return null;
+          })
         )}
       </div>
 

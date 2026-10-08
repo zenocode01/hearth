@@ -2,6 +2,7 @@ import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  stepCountIs,
   streamText,
   toUIMessageStream,
   type UIMessage,
@@ -11,9 +12,11 @@ import { eq } from 'drizzle-orm';
 
 import { getDb } from '@/lib/db';
 import { createId } from '@/lib/db/id';
+import { serializeParts } from '@/lib/db/messageParts';
 import { agents, messages as messagesTable, topics } from '@/lib/db/schema';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
 import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
+import { chatTools } from '@/lib/llm/tools';
 
 export const maxDuration = 300;
 
@@ -84,7 +87,7 @@ export async function POST(req: Request) {
     }
   }
 
-  /** 流结束后把 AI 回复（正文 + 推理）落库，两条路径共用。 */
+  /** 流结束后把 AI 回复（正文 + 推理 + 工具调用）落库，两条路径共用。 */
   const persistAssistant: UIMessageStreamOnEndCallback<UIMessage> = ({ responseMessage }) => {
     if (!topicId) return;
 
@@ -96,7 +99,10 @@ export async function POST(req: Request) {
 
     const text = joinParts('text');
     const reasoning = joinParts('reasoning');
-    if (!text && !reasoning) return;
+    // 有序片段：刷新后能原样恢复工具卡片与交错顺序（与 SDK 解耦，见 messageParts.ts）
+    const storedParts = serializeParts(responseMessage.parts);
+    const hasToolCall = storedParts.some((part) => part.type === 'tool');
+    if (!text && !reasoning && !hasToolCall) return;
 
     try {
       db.insert(messagesTable)
@@ -105,6 +111,7 @@ export async function POST(req: Request) {
           createdAt: new Date(),
           // 与客户端内存里的消息 id 一致（见 generateId / generateMessageId）
           id: responseMessage.id ?? createId('msg'),
+          parts: JSON.stringify(storedParts),
           reasoning: reasoning || null,
           reasoningMs: reasoning ? Date.now() - requestStartedAt : null,
           role: 'assistant',
@@ -209,6 +216,10 @@ export async function POST(req: Request) {
     instructions: agent?.systemPrompt ?? undefined,
     messages: await convertToModelMessages(uiMessages),
     temperature: agent?.temperature ?? undefined,
+    // 内置工具（L2-11）：模型主动调用 → 服务端执行 → 结果回填后继续生成
+    tools: chatTools,
+    // 最多 5 步（多轮工具调用），避免模型陷入死循环
+    stopWhen: stepCountIs(5),
   });
 
   return createUIMessageStreamResponse({

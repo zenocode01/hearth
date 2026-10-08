@@ -46,6 +46,11 @@ export const messages = sqliteTable(
     reasoning: text('reasoning'),
     /** 思考耗时（毫秒），用于历史消息显示"已深度思考 N 秒" */
     reasoningMs: integer('reasoning_ms'),
+    /**
+     * 完整消息片段（JSON）：text / reasoning / tool 的**有序**数组，
+     * 用于刷新后原样恢复工具调用卡片与交错顺序（旧数据为空，按 content + reasoning 兜底）。
+     */
+    parts: text('parts'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (table) => [index('messages_topic_id_created_at_idx').on(table.topicId, table.createdAt)],

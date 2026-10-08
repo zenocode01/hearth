@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ThemeControls } from '@/components/ThemeControls';
 import { useIsMobile } from '@/components/useMediaQuery';
+import { parseStoredParts, deserializeParts } from '@/lib/db/messageParts';
 import type { Agent, ChatMessage, Topic } from '@/lib/db/schema';
 
 import { BackBottom } from './BackBottom';
@@ -161,10 +162,14 @@ export function ChatView() {
       .then((data: { messages?: ChatMessage[] }) => {
         if (cancelled) return;
         const history: UIMessage[] = (data.messages ?? []).map((row) => {
-          const parts: UIMessage['parts'] = [];
-          // 推理过程存在时放在正文之前（与实时渲染的结构一致）
-          if (row.reasoning) parts.push({ text: row.reasoning, type: 'reasoning' });
-          if (row.content) parts.push({ text: row.content, type: 'text' });
+          // 优先用入库的完整片段（含工具调用与交错顺序）；老数据回落到 content + reasoning
+          const stored = parseStoredParts(row.parts);
+          const parts: UIMessage['parts'] = stored
+            ? deserializeParts(stored)
+            : [
+                ...(row.reasoning ? [{ text: row.reasoning, type: 'reasoning' as const }] : []),
+                ...(row.content ? [{ text: row.content, type: 'text' as const }] : []),
+              ];
           return {
             id: row.id,
             metadata: row.reasoningMs ? { reasoningMs: row.reasoningMs } : undefined,

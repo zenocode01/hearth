@@ -36,6 +36,13 @@
       "when": 1791374152630,
       "tag": "0004_add_agent_cli_runtime",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791441310150,
+      "tag": "0005_add_message_parts",
+      "breakpoints": true
     }
   ]
 }
