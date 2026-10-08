@@ -70,6 +70,7 @@
   - 工具开关：会话里的 `auto`→`--tools +名字`、`disabled`→`--exclude-tools 名字`，追加到命令末尾即可。
   - **`--system-prompt` 会替换 pi 默认系统提示（含 `<tools>` 段）**——所以工具清单要**往回扫最近若干会话**找那个有 `<tools>` 段的。
   - pi 事件：`message_update`（thinking/text/toolcall delta）、`message_end`（`role=toolResult` 带 `details`）、`extension_ui_request`（对话要按序入队处理！）、`agent_settled`。
+  - **pi"没有输出"先查 pi 自己的模型认证**（2026-10-08 踩过）：pi 的 provider 配在 `~/.pi/agent/models.json`（默认 provider 见 `settings.json`），服务端换 key 后 pi 会收到 `401`，`message_end` 里 `content` 为空、`stopReason:"error"` → 界面看起来就是"没反应"。诊断：`scripts/` 临时写个 RPC 探针打原始事件（看 `errorMessage`）；修：改 `models.json` 的 `apiKey`。pi 版本用 `pi update self` 升级（当前 1.1.0，0.87→1.1 RPC 协议兼容）。
 - **`refs/` 是只读参考书**：不入库、不许 import；学思路自己写（见 `license-and-references`）。
 - **临时脚本**：放 `scripts/` 的调试脚本用完删掉（仓库里只留 `mock-llm.mjs`）。
 - 旧数据兼容：早期 `messages` 行没有 `parts` 列 → 历史加载回落到 `content + reasoning`。
@@ -91,6 +92,7 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
 - **MCP（L2-12）**：未做。`ToolCard` 已能渲染 `dynamic-tool`，接入时可直接复用。
 - **提问栏只支持单个 pending**：LobeHub 有 tab 切换 + 批量批准 + 跨会话 island（`InterventionBar`），我们只做了"单一渲染位"。
 - **pi 工具开关**：`grep` 做过行为验证；`powershell/ls/find` 机制相同但未逐一实测。
+- **pi 出错时界面静默**：`message_end` 里的 `errorMessage`（如 401）没有透出到聊天流，用户只看到空回复——违反"错误有可读提示"验收项，待修（`parsePiEvent` 把 error 转成可读片段即可）。
 - **i18n（L2-8）**：未做。
 - 移动端只做了竖屏主流程（消息操作按钮仍是小尺寸）。
 
