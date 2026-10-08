@@ -18,6 +18,9 @@ import { serializeParts } from '@/lib/db/messageParts';
 import { agents, messages as messagesTable, topics } from '@/lib/db/schema';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
 import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
+import { createRun, endRun, waitForQuestion } from '@/lib/llm/cliRuns';
+import { isPiCommand } from '@/lib/llm/piTools';
+import { runPiRpcAgent } from '@/lib/llm/piRpc';
 import { chatTools, resolveChatTools } from '@/lib/llm/tools';
 import { enabledToolNames, parseToolSettings } from '@/lib/tools/settings';
 
@@ -174,12 +177,23 @@ export async function POST(req: Request) {
         let textOpen = false;
         let reasoningOpen = false;
 
+        // pi 的 RPC 模式（`--mode rpc`）：支持扩展的交互（question 等）
+        const useRpc = isPiCommand(command) && /--mode[=\s]+rpc\b/.test(command);
+        const runId = createId('run');
+        if (useRpc) createRun(runId);
+
+        /** 最近一次 question 工具调用（pi 的 question 扩展在它的 execute 里发起对话） */
+        let pendingQuestion: { input?: unknown; toolCallId: string } | null = null;
+
         /** 按片段类型懒开启对应的 part（CLI 的思考与正文可能交错到达）。 */
         const writeChunk = (chunk: CliChunk) => {
           // 工具调用：pi 自带的 read/bash/edit/... 会变成聊天里的工具卡片
           if (chunk.kind === 'tool') {
             const { tool } = chunk;
             if (tool.state === 'input-available') {
+              if (tool.name === 'question') {
+                pendingQuestion = { input: tool.input, toolCallId: tool.toolCallId };
+              }
               writer.write({
                 input: tool.input,
                 toolCallId: tool.toolCallId,
@@ -221,21 +235,47 @@ export async function POST(req: Request) {
         };
 
         try {
-          for await (const chunk of runCliAgent({
-            command,
-            prompt: buildCliPrompt({
-              history,
-              question,
-              // 模板里有 {{systemPrompt}} 就交给 CLI，没有则并进 prompt
-              systemPrompt: command.includes('{{systemPrompt}}') ? null : agent.systemPrompt,
-            }),
-            systemPrompt: agent.systemPrompt,
-          })) {
+          const promptText = buildCliPrompt({
+            history,
+            question,
+            // 模板里有 {{systemPrompt}} 就交给 CLI，没有则并进 prompt
+            systemPrompt: command.includes('{{systemPrompt}}') ? null : agent.systemPrompt,
+          });
+
+          const runner = useRpc
+            ? runPiRpcAgent({
+                askUser: async (request) => {
+                  // 把「等待回答」标在 question 工具卡片上（带上回答所需的 runId / requestId）
+                  if (!pendingQuestion) return { cancelled: true };
+
+                  writer.write({
+                    input: pendingQuestion.input,
+                    toolCallId: pendingQuestion.toolCallId,
+                    toolMetadata: {
+                      awaiting: true,
+                      requestId: request.id,
+                      runId,
+                    } as never,
+                    toolName: 'question',
+                    type: 'tool-input-available',
+                  });
+
+                  return waitForQuestion(runId, request.id);
+                },
+                command,
+                prompt: promptText,
+                systemPrompt: agent.systemPrompt,
+              })
+            : runCliAgent({ command, prompt: promptText, systemPrompt: agent.systemPrompt });
+
+          for await (const chunk of runner) {
             writeChunk(chunk);
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           writeChunk({ delta: `\n\n> 运行失败：${message}`, kind: 'text' });
+        } finally {
+          if (useRpc) endRun(runId);
         }
 
         if (reasoningOpen) writer.write({ id: reasoningId, type: 'reasoning-end' });

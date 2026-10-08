@@ -39,7 +39,8 @@ const CLI_PRESETS = [
     Icon: Pi,
     iconKey: 'pi',
     label: 'Pi',
-    value: 'pi -p --mode json --system-prompt "{{systemPrompt}}" "{{prompt}}"',
+    // RPC 模式：支持 pi 扩展的交互（question 提问等），提示词走 RPC 命令
+    value: 'pi --mode rpc --system-prompt "{{systemPrompt}}"',
   },
   {
     // opencode 默认和桌面端共用数据目录会互抢（报「Database is not empty and has no session table」），

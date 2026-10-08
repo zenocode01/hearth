@@ -186,6 +186,8 @@ export function buildCliInvocation({ command, prompt, systemPrompt }: CliRunOpti
     file: args[0],
     // 没用 {{prompt}} 占位符 → prompt 从 stdin 传（很多 CLI 支持）
     stdin: usesPromptPlaceholder ? null : prompt,
+    /** 模板里有没有 {{prompt}}（RPC 模式要求没有——提示词走 RPC 命令） */
+    usesPromptPlaceholder,
   };
 }
 

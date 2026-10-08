@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { memo, useState } from 'react';
 
+import { QuestionForm } from './QuestionForm';
+
 /**
  * 工具调用卡片（参考 refs 的 Conversation 工具卡）：
  * - 一行标题：工具图标 + 中文名 + 关键参数摘要 + 状态（调用中/完成/失败）+ 折叠箭头
@@ -119,15 +121,25 @@ export const ToolCard = memo(({ toolName, input, output, errorText, state, toolM
       : undefined;
   const todos = Array.isArray(todoMetadata?.todos) ? todoMetadata.todos : null;
 
-  const [open, setOpen] = useState(Boolean(todos?.length));
+  // pi（RPC 模式）的提问：路由在等待回答时会给工具片段打上 awaiting 标记
+  const questionMetadata =
+    toolName === 'question'
+      ? (toolMetadata as { awaiting?: boolean; requestId?: string; runId?: string } | undefined)
+      : undefined;
+  const awaiting =
+    Boolean(questionMetadata?.awaiting && questionMetadata.requestId && questionMetadata.runId) &&
+    state === 'input-available';
+
+  const [open, setOpen] = useState(Boolean(todos?.length) || awaiting);
   const meta = TOOL_META[toolName] ?? { icon: Wrench, label: toolName };
 
   const running = state === 'input-streaming' || state === 'input-available';
   const failed = state === 'output-error';
-  const statusLabel = running ? '调用中…' : failed ? '失败' : '已完成';
+  const statusLabel = awaiting ? '等待回答…' : running ? '调用中…' : failed ? '失败' : '已完成';
   const doneCount = todos?.filter((todo) => todo.done).length ?? 0;
   const summary = todos ? `${doneCount}/${todos.length} 已完成` : summarizeInput(input);
-  const hasBody = input != null || output != null || Boolean(errorText) || Boolean(todos);
+  const hasBody =
+    input != null || output != null || Boolean(errorText) || Boolean(todos) || awaiting;
 
   return (
     <div style={{ margin: '6px 0' }}>
@@ -207,8 +219,14 @@ export const ToolCard = memo(({ toolName, input, output, errorText, state, toolM
             paddingLeft: 10,
           }}
         >
-          {/* todo：直接渲染清单（比原始 JSON 好读） */}
-          {todos ? (
+          {/* 提问：等待用户回答时渲染表单（pi RPC 模式） */}
+          {awaiting && questionMetadata ? (
+            <QuestionForm
+              input={input}
+              requestId={questionMetadata.requestId!}
+              runId={questionMetadata.runId!}
+            />
+          ) : todos ? (
             <>
               {todos.length === 0 ? (
                 <div style={{ opacity: 0.7 }}>清单已清空（全部完成）</div>
