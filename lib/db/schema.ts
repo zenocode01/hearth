@@ -28,6 +28,11 @@ export const topics = sqliteTable('topics', {
   title: text('title').notNull(),
   /** 该会话使用的 Agent；Agent 删除后置空（回到默认） */
   agentId: text('agent_id').references(() => agents.id, { onDelete: 'set null' }),
+  /**
+   * 工具开关（JSON）：`[{ name, mode: 'auto' | 'disabled' }]`。
+   * 空/未设置 = 全部工具自动启用（与 LobeHub 的"不在列表里 = auto"一致）。
+   */
+  tools: text('tools'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });

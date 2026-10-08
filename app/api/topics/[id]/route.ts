@@ -2,6 +2,7 @@ import { asc, eq } from 'drizzle-orm';
 
 import { getDb } from '@/lib/db';
 import { messages, topics } from '@/lib/db/schema';
+import { parseToolSettings } from '@/lib/tools/settings';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -23,17 +24,19 @@ export async function GET(_req: Request, { params }: Params) {
   return Response.json({ messages: rows, topic });
 }
 
-/** PATCH —— 改名 / 换 Agent。 */
+/** PATCH —— 改名 / 换 Agent / 工具开关。 */
 export async function PATCH(req: Request, { params }: Params) {
   const { id } = await params;
-  const { title, agentId } = (await req.json().catch(() => ({}))) as {
+  const { title, agentId, tools } = (await req.json().catch(() => ({}))) as {
     agentId?: string | null;
     title?: string;
+    tools?: unknown;
   };
 
-  const patch: { agentId?: string | null; title?: string; updatedAt: Date } = {
-    updatedAt: new Date(),
-  };
+  const patch: { agentId?: string | null; title?: string; tools?: string | null; updatedAt: Date } =
+    {
+      updatedAt: new Date(),
+    };
 
   if (typeof title === 'string') {
     const clean = title.trim();
@@ -42,6 +45,11 @@ export async function PATCH(req: Request, { params }: Params) {
   }
   if (agentId !== undefined) {
     patch.agentId = agentId?.trim() || null;
+  }
+  if (tools !== undefined) {
+    // 工具开关：存 `[{ name, mode }]`；传 null 表示恢复"全部自动启用"
+    const settings = parseToolSettings(tools === null ? null : JSON.stringify(tools));
+    patch.tools = settings && settings.length > 0 ? JSON.stringify(settings) : null;
   }
 
   getDb().update(topics).set(patch).where(eq(topics.id, id)).run();

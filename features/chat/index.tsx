@@ -13,6 +13,7 @@ import { ThemeControls } from '@/components/ThemeControls';
 import { useIsMobile } from '@/components/useMediaQuery';
 import { parseStoredParts, deserializeParts } from '@/lib/db/messageParts';
 import type { Agent, ChatMessage, Topic } from '@/lib/db/schema';
+import { parseToolSettings, type ToolSetting } from '@/lib/tools/settings';
 
 import { BackBottom } from './BackBottom';
 import { ChatComposer } from './ChatComposer';
@@ -20,6 +21,7 @@ import { EmptyState } from './EmptyState';
 import { MessageItem } from './MessageItem';
 import type { MessageActionKey } from './MessageActions';
 import { MessageSkeleton } from './MessageSkeleton';
+import { ToolPicker } from './ToolPicker';
 import { TopicSidebar } from './TopicSidebar';
 
 /** 距底多少像素内算"在底部" */
@@ -37,6 +39,8 @@ export function ChatView() {
   const [historyAttempt, setHistoryAttempt] = useState(0);
   /** 输入框草稿（受控：支持"放回输入框"） */
   const [draft, setDraft] = useState('');
+  /** 本会话的工具开关（[] = 全部自动启用） */
+  const [toolSettings, setToolSettings] = useState<ToolSetting[]>([]);
   /** 手机端：侧栏抽屉是否打开 */
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -114,12 +118,30 @@ export function ChatView() {
     if (id) setActiveTopicId(id);
   }, [refreshAgents, refreshTopics, router]);
 
-  // 当前会话使用哪个 Agent（由会话记录决定；新建会话时用选择器里的值）
+  // 当前会话使用哪个 Agent / 哪些工具（由会话记录决定；新建会话时用选择器里的值）
   useEffect(() => {
     if (!activeTopicId) return;
     const topic = topics.find((item) => item.id === activeTopicId);
-    if (topic) setActiveAgentId(topic.agentId ?? null);
+    if (topic) {
+      setActiveAgentId(topic.agentId ?? null);
+      setToolSettings(parseToolSettings(topic.tools) ?? []);
+    }
   }, [activeTopicId, topics]);
+
+  /** 工具开关：已有会话落库；新会话先记在本地，建会话时带上。 */
+  const handleToolChange = useCallback(
+    async (next: ToolSetting[]) => {
+      setToolSettings(next);
+      if (activeTopicId) {
+        await fetch(`/api/topics/${activeTopicId}`, {
+          body: JSON.stringify({ tools: next }),
+          headers: { 'content-type': 'application/json' },
+          method: 'PATCH',
+        });
+      }
+    },
+    [activeTopicId],
+  );
 
   /** 切换 Agent：已有会话则落库（换人设立即生效），否则记在本地等建会话时带上。 */
   const handleAgentChange = useCallback(
@@ -223,7 +245,11 @@ export function ChatView() {
     if (!topicId) {
       try {
         const res = await fetch('/api/topics', {
-          body: JSON.stringify({ agentId: activeAgentId ?? undefined, title: text.slice(0, 40) }),
+          body: JSON.stringify({
+            agentId: activeAgentId ?? undefined,
+            title: text.slice(0, 40),
+            tools: toolSettings,
+          }),
           headers: { 'content-type': 'application/json' },
           method: 'POST',
         });
@@ -245,10 +271,16 @@ export function ChatView() {
     requestStartedAtRef.current = Date.now();
     void sendMessage(
       { text },
-      { body: { agentId: activeAgentId ?? undefined, topicId: topicId ?? undefined } },
+      {
+        body: {
+          agentId: activeAgentId ?? undefined,
+          tools: toolSettings,
+          topicId: topicId ?? undefined,
+        },
+      },
     );
     requestAnimationFrame(() => scrollToBottom(false));
-  }, [activeAgentId, activeTopicId, draft, refreshTopics, scrollToBottom, sendMessage]);
+  }, [activeAgentId, activeTopicId, draft, refreshTopics, scrollToBottom, sendMessage, toolSettings]);
 
   /** 消息操作：复制 / 放回输入框 / 重新生成 / 删除。 */
   const handleMessageAction = useCallback(
@@ -539,6 +571,12 @@ export function ChatView() {
 
         <ChatComposer
           busy={busy}
+          toolPicker={
+            <ToolPicker
+              settings={toolSettings}
+              onChange={(next) => void handleToolChange(next)}
+            />
+          }
           value={draft}
           onChange={setDraft}
           onSend={() => void handleSend()}

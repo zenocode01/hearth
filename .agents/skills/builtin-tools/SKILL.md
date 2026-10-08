@@ -17,6 +17,20 @@ AI 能在对话中主动调用「内置工具」，结果回填给模型继续�
 | `features/chat/ToolCard.tsx` | 工具卡片：图标 + 中文名 + 参数摘要 + 状态（调用中/已完成/失败），展开看参数与结果 |
 | `features/chat/MessageItem.tsx` | **按片段顺序**渲染：reasoning → tool 卡片 → Markdown 正文（多步调用的交错顺序与真实过程一致） |
 
+## 工具列表与开关（参考 refs 的 ChatInput/ActionBar/Tools）
+
+| 位置 | 职责 |
+|---|---|
+| `features/chat/ToolPicker.tsx` | 输入框操作栏左侧的「工具 N/M」入口 → Popover（宽 320）：按 **已启用 / 已禁用** 分组，每行一个 Switch；打开面板时若目录为空会补拉一次 |
+| `lib/tools/settings.ts` | **纯逻辑**（不 import `ai`）：`ToolSetting` / `parseToolSettings` / `enabledToolNames`——客户端与服务端共用 |
+| `app/api/tools/route.ts` | 把 `TOOL_CATALOG` 给前端（**不能让客户端 import `lib/llm/tools.ts`**，那会把 `ai` 打进浏览器包） |
+| `topics.tools`（JSON） | 会话级的开关：`[{ name, mode: 'auto' | 'disabled' }]`；**不在列表里 = auto**（LobeHub pluginConfig 的思路），全 auto 时归一成 `null` |
+| `resolveChatTools(enabledToolNames(settings, names))` | 服务端按开关筛选；`null` = 全部，`[]` = 一个不给（`tools: undefined`） |
+
+- **为什么存在会话上**：LobeHub 存 Agent 级（`agents.plugins`）+ 会话回退；我们的默认聊天没有 Agent，会话级更直接（也对应 LobeHub 的会话配置回退）。将来要 Agent 级默认，解析顺序改成 `topic.tools ?? agent.tools ?? null` 即可。
+- 目录与工具定义**同一来源**（`TOOL_CATALOG` 从 `chatTools` 的定义里读 label/description/参数），避免两处漂移。
+- 新会话的开关先记在客户端，建 topic 时带上（与 agentId 同一套路）。
+
 ## 关键决定与坑（都踩过）
 
 - **用 `jsonSchema()` 不用 zod**：zod 只是 `ai` 的传递依赖，项目依赖清单里没有（守则：新依赖先问用户）。`jsonSchema<T>({ type:'object', properties, required })` 一样能给 `execute` 推断出入参类型。
@@ -25,6 +39,8 @@ AI 能在对话中主动调用「内置工具」，结果回填给模型继续�
 - **不要把 AI SDK 的 part 原样入库**：SDK 升级会改结构。存**自己的紧凑片段**（`{type:'text'|'reasoning'|'tool', …}`），回读时再还原成 `tool-<name>`。
 - **`messages.parts` 取代"从 content+reasoning 拼"**：老数据没有该列 → 历史加载回落到 content + reasoning（不能直接当空处理）。
 - **坑：`convertToModelMessages` 会对每条消息读 `message.parts.some(...)`** —— 任何一条没有 `parts` 字段的消息都会 500（`Cannot read properties of undefined (reading 'some')`）。上行历史必须条条带 `parts`。
+- **坑：`humanizeError` 别用裸 `fetch` 当网络关键词**：工具报错消息里会列出可用工具（含 `fetch_url`），一匹配就误报成"无法连接模型服务"。要先用 `NoSuchToolError.isInstance` / `InvalidToolInputError.isInstance` 分类，网络判断只留 `fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|socket hang up` 这类具体模式。
+- **弱模型会幻觉工具名**：qwen 偶尔先调 `<名字>_function`（provider 风格的误写），SDK 报"不存在的工具" → UI 显示一张**失败卡片**，模型随即自己改用正确工具重试（同一轮里两张卡片）。属正常现象，不用拦。
 - **坑：改了 schema 必须重启 dev**：DB 连接缓存在 `globalThis`（迁移只在打开连接时跑），不重启就报 `no such column`。
 - **迁移生成**：改 `lib/db/schema.ts` → `npx drizzle-kit generate --name <有意义的名字>`（会自动写 SQL + snapshot + journal，别手工改 `_journal.json`）。
 

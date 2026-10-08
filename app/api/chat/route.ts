@@ -2,6 +2,8 @@ import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  InvalidToolInputError,
+  NoSuchToolError,
   stepCountIs,
   streamText,
   toUIMessageStream,
@@ -16,7 +18,8 @@ import { serializeParts } from '@/lib/db/messageParts';
 import { agents, messages as messagesTable, topics } from '@/lib/db/schema';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
 import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
-import { chatTools } from '@/lib/llm/tools';
+import { chatTools, resolveChatTools } from '@/lib/llm/tools';
+import { enabledToolNames, parseToolSettings } from '@/lib/tools/settings';
 
 export const maxDuration = 300;
 
@@ -30,6 +33,14 @@ function textOf(message: UIMessage): string {
 
 /** 把底层错误翻译成用户可读的提示（验收项：错 key / 断网必须有可读错误）。 */
 function humanizeError(error: unknown): string {
+  // 工具类错误优先：模型偶尔会调用不存在的工具（或参数不合法），这不是网络问题
+  if (NoSuchToolError.isInstance(error)) {
+    return `模型想调用一个不存在的工具，已跳过这次调用，它会自己换一种方式继续。`;
+  }
+  if (InvalidToolInputError.isInstance(error)) {
+    return `工具参数不合法，已跳过这次调用。`;
+  }
+
   const status = (error as { statusCode?: number } | undefined)?.statusCode;
   const message = error instanceof Error ? error.message : String(error);
 
@@ -45,7 +56,8 @@ function humanizeError(error: unknown): string {
   if (typeof status === 'number') {
     return `模型服务返回错误（${status}）：${message}`;
   }
-  if (/fetch|network|ECONN|ENOTFOUND|timeout/i.test(message)) {
+  // 注意：不要用裸 "fetch" 做关键词——工具报错信息里会出现 fetch_url 这种工具名，会误判
+  if (/fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|socket hang up|network error|timed? ?out/i.test(message)) {
     return `无法连接模型服务：请检查网络，以及 LLM_BASE_URL 是否可达。`;
   }
   return `请求失败：${message}`;
@@ -58,18 +70,32 @@ export async function POST(req: Request) {
     messages: uiMessages,
     topicId,
     agentId,
-  }: { messages: UIMessage[]; topicId?: string; agentId?: string } = await req.json();
+    tools: bodyTools,
+  }: {
+    agentId?: string;
+    messages: UIMessage[];
+    tools?: unknown;
+    topicId?: string;
+  } = await req.json();
 
   const db = getDb();
   // 会话自身的 Agent 优先于请求携带的（换人设立即生效：每次都按 id 实时读库）
   let effectiveAgentId = agentId ?? null;
-  if (topicId) {
-    const topic = db.select().from(topics).where(eq(topics.id, topicId)).get();
-    if (topic?.agentId) effectiveAgentId = topic.agentId;
-  }
+  const topicRow = topicId
+    ? (db.select().from(topics).where(eq(topics.id, topicId)).get() ?? null)
+    : null;
+  if (topicRow?.agentId) effectiveAgentId = topicRow.agentId;
   const agent = effectiveAgentId
     ? (db.select().from(agents).where(eq(agents.id, effectiveAgentId)).get() ?? null)
     : null;
+
+  // 工具开关：会话里存的为准（新会话用请求里带的）；没有设置 = 全部自动启用
+  const toolSettings =
+    parseToolSettings(topicRow?.tools) ??
+    parseToolSettings(bodyTools === undefined ? null : JSON.stringify(bodyTools));
+  const chatToolsForTurn = resolveChatTools(
+    enabledToolNames(toolSettings, Object.keys(chatTools)),
+  );
 
   // 落库：本次新发的用户消息（id 天然去重，重复提交不会写两条）
   if (topicId) {
@@ -216,8 +242,8 @@ export async function POST(req: Request) {
     instructions: agent?.systemPrompt ?? undefined,
     messages: await convertToModelMessages(uiMessages),
     temperature: agent?.temperature ?? undefined,
-    // 内置工具（L2-11）：模型主动调用 → 服务端执行 → 结果回填后继续生成
-    tools: chatTools,
+    // 内置工具（L2-11）：按会话开关筛选；模型主动调用 → 服务端执行 → 结果回填后继续生成
+    tools: Object.keys(chatToolsForTurn).length > 0 ? chatToolsForTurn : undefined,
     // 最多 5 步（多轮工具调用），避免模型陷入死循环
     stopWhen: stepCountIs(5),
   });

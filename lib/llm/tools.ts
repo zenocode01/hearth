@@ -170,3 +170,61 @@ const fetchUrl = tool({
 
 /** 交给模型的内置工具集（名字即 UI 里的 tool-<name> 前缀） */
 export const chatTools = { calculate, fetch_url: fetchUrl, get_current_time: getCurrentTime };
+
+/** UI 元信息（图标 + 中文名）；与工具定义分开放：定义是给模型的，这里是给界面看的。 */
+export type BuiltinToolName = keyof typeof chatTools;
+
+export interface ToolCatalogItem {
+  /** 给模型的名字（= chatTools 的 key，也是 part.type 的后缀） */
+  name: BuiltinToolName;
+  /** 界面上的中文名 */
+  label: string;
+  description: string;
+  /** 参数清单（从 jsonSchema 里读出来，UI 直接展示） */
+  parameters: Array<{ description: string; name: string; required: boolean }>;
+}
+
+const TOOL_LABELS: Record<BuiltinToolName, string> = {
+  calculate: '计算器',
+  fetch_url: '抓取网页',
+  get_current_time: '当前时间',
+};
+
+/** 从 jsonSchema 定义里挑出参数说明（保持工具定义的单一来源）。 */
+function readParameters(schema: unknown): ToolCatalogItem['parameters'] {
+  const parsed = schema as {
+    properties?: Record<string, { description?: string }>;
+    required?: string[];
+  } | null;
+  const properties = parsed?.properties ?? {};
+  const required = new Set(parsed?.required ?? []);
+
+  return Object.entries(properties).map(([name, value]) => ({
+    description: value?.description ?? '',
+    name,
+    required: required.has(name),
+  }));
+}
+
+/** 给界面用的工具目录（列表/开关面板读它） */
+export const TOOL_CATALOG: ToolCatalogItem[] = (
+  Object.entries(chatTools) as Array<[BuiltinToolName, { description?: string; inputSchema?: unknown }]>
+).map(([name, definition]) => ({
+  description: definition.description ?? '',
+  label: TOOL_LABELS[name] ?? name,
+  name,
+  parameters: readParameters(definition.inputSchema),
+}));
+
+/**
+ * 按启用名单筛选工具：`null/undefined` = 全部启用（默认，与历史行为一致）；
+ * 传了名单就只给名单里的（空数组 = 一个都不给，模型只能用自然语言回答）。
+ */
+export function resolveChatTools(enabled?: string[] | null): typeof chatTools {
+  if (enabled == null) return chatTools;
+
+  const allowed = new Set(enabled);
+  return Object.fromEntries(
+    Object.entries(chatTools).filter(([name]) => allowed.has(name)),
+  ) as typeof chatTools;
+}
