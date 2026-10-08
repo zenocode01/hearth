@@ -221,6 +221,26 @@ function stripAnsi(value: string): string {
 }
 
 /**
+ * 把 pi 的模型错误（`message_end` 的 `errorMessage`）翻译成人话。
+ * 失败必须有可读提示（验收项）——401 直接告诉用户去改哪里，而不是甩一段 JSON。
+ */
+export function humanizePiError(errorMessage: string): string {
+  const detail = errorMessage.replace(/\s+/g, ' ').trim().slice(0, 300);
+  const status = /^\s*(\d{3})\b/.exec(detail)?.[1];
+
+  if (status === '401' || status === '403') {
+    return `模型服务拒绝了请求（${status}）：pi 的 API key 不对或已过期，检查 ~/.pi/agent/models.json 里该 provider 的 apiKey。`;
+  }
+  if (status === '404') {
+    return `接口或模型不存在（404）：检查 pi provider 的 baseUrl 与模型 id。${detail}`;
+  }
+  if (status === '429') {
+    return '请求过于频繁或额度不足（429）：请稍后重试。';
+  }
+  return detail || '未知错误';
+}
+
+/**
  * 把 pi 的一行 JSON 事件映射成片段；不是事件（不是 JSON 或没有 type 字段）时返回 null。
  *
  * 注意：pi 的事件类型会增长（session / agent_start / turn_start / message_* /
@@ -244,8 +264,10 @@ export function parsePiEvent(line: string): CliChunk[] | null {
     message?: {
       content?: Array<{ text?: unknown; type?: unknown }>;
       details?: unknown;
+      errorMessage?: unknown;
       isError?: unknown;
       role?: unknown;
+      stopReason?: unknown;
       toolCallId?: unknown;
       toolName?: unknown;
     };
@@ -312,6 +334,18 @@ export function parsePiEvent(line: string): CliChunk[] | null {
         },
       },
     ];
+  }
+
+  // 模型出错：assistant 的 message_end 带 stopReason=error + errorMessage（如 key 失效的 401）。
+  // 必须透出到正文，否则界面只剩一个空回复（踩过：401 静默，用户只看到"没有输出"）。
+  if (event.type === 'message_end' && event.message?.role === 'assistant') {
+    const { message } = event;
+    if (typeof message.errorMessage === 'string' && message.errorMessage.trim()) {
+      return [
+        { delta: `\n\n> ⚠️ pi 调用模型失败：${humanizePiError(message.errorMessage)}`, kind: 'text' },
+      ];
+    }
+    return [];
   }
 
   if (event.type === 'error') {
