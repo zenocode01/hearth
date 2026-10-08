@@ -176,6 +176,32 @@ export async function POST(req: Request) {
 
         /** 按片段类型懒开启对应的 part（CLI 的思考与正文可能交错到达）。 */
         const writeChunk = (chunk: CliChunk) => {
+          // 工具调用：pi 自带的 read/bash/edit/... 会变成聊天里的工具卡片
+          if (chunk.kind === 'tool') {
+            const { tool } = chunk;
+            if (tool.state === 'input-available') {
+              writer.write({
+                input: tool.input,
+                toolCallId: tool.toolCallId,
+                toolName: tool.name,
+                type: 'tool-input-available',
+              });
+            } else if (tool.state === 'output-available') {
+              writer.write({
+                output: tool.output,
+                toolCallId: tool.toolCallId,
+                type: 'tool-output-available',
+              });
+            } else {
+              writer.write({
+                errorText: tool.errorText ?? '工具执行失败',
+                toolCallId: tool.toolCallId,
+                type: 'tool-output-error',
+              });
+            }
+            return;
+          }
+
           if (chunk.kind === 'reasoning') {
             if (!reasoningOpen) {
               writer.write({ id: reasoningId, type: 'reasoning-start' });

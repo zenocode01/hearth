@@ -49,6 +49,21 @@ Agent 走**外部 CLI = pi** 时，工具是 pi 自己的（Hearth 的内置工�
 - **pi 侧怎么改**：`~/.pi/agent/settings.json` 的 `defaultTools`，或命令模板里加 `--tools` / `--exclude-tools` / `--no-builtin-tools`（pi 支持这些参数，我们没代改）。
 - **清单会过期**：pi 升级新增工具时 `PI_BUILTIN_TOOLS` 要跟着更新（未知工具仍会原样展示，不会丢）。
 
+## pi 的工具卡片（外部 CLI 运行时，pi 的工具真的渲染到会话里）
+
+pi 的事件流里有完整的工具协议（**实测**，`pi -p --mode json` 读文件一次）：
+
+| pi 事件 | 用途 | 我们怎么处理 |
+|---|---|---|
+| `message_update` → `toolcall_start` / `toolcall_delta` / **`toolcall_end`** | 工具调用（`toolcall_end.toolCall` = `{id, name, arguments}` 权威值） | 只在 `toolcall_end` 发一个 **input-available** 片段（忽略 start/delta，参数是流式的 JSON 片段） |
+| `tool_execution_start` / `update` / `end` | 执行进度 | 忽略（结果以 toolResult 消息为准） |
+| `message_end`（`message.role === 'toolResult'`） | **权威结果**：`toolCallId` / `toolName` / `content[]` / `isError` | 发 **output-available**（output = content 文本，截 4000 字）或 **output-error** |
+
+- 路由把片段写成 AI SDK 的 UI chunk：`tool-input-available` / `tool-output-available` / `tool-output-error`（字段：`toolCallId`、`toolName`、`input`、`output`、`errorText`）。
+- **持久化不用额外做**：`serializeParts` 本来就收工具片段（CLI 的也一样），刷新后卡片原样恢复 ✅。
+- `ToolCard` 的 `TOOL_META` 里补了 pi 工具的中文名与图标（read=读取文件 / bash=执行命令 / edit=编辑文件 / write=写入文件 / grep=搜索内容 / find=查找文件 / ls=列目录 / powershell=PowerShell）；参数摘要会优先取 `command` / `path` / `pattern` / `glob` 等键。
+- 注意：CLI 分支**不调用** `convertToModelMessages`（pi 自己管上下文，我们只把文本历史拼进 prompt），所以 CLI 的工具片段没有"回传给模型"的问题。
+
 ## 关键决定与坑（都踩过）
 
 - **用 `jsonSchema()` 不用 zod**：zod 只是 `ai` 的传递依赖，项目依赖清单里没有（守则：新依赖先问用户）。`jsonSchema<T>({ type:'object', properties, required })` 一样能给 `execute` 推断出入参类型。

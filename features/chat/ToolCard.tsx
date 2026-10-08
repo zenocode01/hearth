@@ -2,7 +2,22 @@
 
 import { Block, Icon } from '@lobehub/ui';
 import { Spin } from '@lobehub/ui/base-ui';
-import { Calculator, ChevronDown, Clock, Globe, Wrench, type LucideIcon } from 'lucide-react';
+import {
+  Calculator,
+  ChevronDown,
+  Clock,
+  FilePlus,
+  FileSearch,
+  FileText,
+  FolderTree,
+  Globe,
+  Pencil,
+  Play,
+  Search,
+  Terminal,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react';
 import { memo, useState } from 'react';
 
 /**
@@ -20,9 +35,19 @@ interface ToolCardProps {
 }
 
 const TOOL_META: Record<string, { icon: LucideIcon; label: string }> = {
+  // Hearth 内置工具
   calculate: { icon: Calculator, label: '计算器' },
   fetch_url: { icon: Globe, label: '抓取网页' },
   get_current_time: { icon: Clock, label: '当前时间' },
+  // pi 自带的工具（外部 CLI 运行时）
+  bash: { icon: Terminal, label: '执行命令' },
+  edit: { icon: Pencil, label: '编辑文件' },
+  find: { icon: FileSearch, label: '查找文件' },
+  grep: { icon: Search, label: '搜索内容' },
+  ls: { icon: FolderTree, label: '列目录' },
+  powershell: { icon: Play, label: 'PowerShell' },
+  read: { icon: FileText, label: '读取文件' },
+  write: { icon: FilePlus, label: '写入文件' },
 };
 
 const Chevron = ({ open }: { open: boolean }) => (
@@ -42,7 +67,20 @@ function summarizeInput(input: unknown): string {
   if (input == null) return '';
   if (typeof input === 'string') return input;
   if (typeof input === 'object') {
-    for (const key of ['expression', 'url', 'query', 'timezone', 'text']) {
+    // 内置工具 + pi 自带工具（bash 的 command、read/edit 的 path/file、grep 的 pattern…）
+    for (const key of [
+      'command',
+      'expression',
+      'url',
+      'query',
+      'pattern',
+      'glob',
+      'path',
+      'file',
+      'file_path',
+      'timezone',
+      'text',
+    ]) {
       const value = (input as Record<string, unknown>)[key];
       if (typeof value === 'string' && value) return value;
     }

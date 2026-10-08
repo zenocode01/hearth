@@ -189,11 +189,23 @@ export function buildCliInvocation({ command, prompt, systemPrompt }: CliRunOpti
   };
 }
 
-/** CLI 输出的一个片段：正文或思考。 */
-export interface CliChunk {
-  delta: string;
-  kind: 'reasoning' | 'text';
-}
+/** CLI 输出的一个片段：正文 / 思考 / 工具调用。 */
+export type CliChunk =
+  | { delta: string; kind: 'reasoning' | 'text' }
+  | {
+      kind: 'tool';
+      tool: {
+        /** 工具名（pi 自带的：read / bash / edit / write / grep / find / ls / powershell…） */
+        name: string;
+        /** 工具调用 id（输入与结果配对用） */
+        toolCallId: string;
+        /** input-available：参数已到齐；output-available / output-error：执行结果 */
+        state: 'input-available' | 'output-available' | 'output-error';
+        errorText?: string;
+        input?: unknown;
+        output?: string;
+      };
+    };
 
 /** 去掉 ANSI 转义序列（很多 CLI 报错时会带颜色码，直接展示会变成乱码）。 */
 const ANSI_ESCAPE =
@@ -217,8 +229,19 @@ function parsePiEvent(line: string): CliChunk[] | null {
   if (!trimmed.startsWith('{')) return null;
 
   let event: {
-    assistantMessageEvent?: { delta?: unknown; type?: unknown };
+    assistantMessageEvent?: {
+      delta?: unknown;
+      toolCall?: { arguments?: unknown; id?: unknown; name?: unknown };
+      type?: unknown;
+    };
     error?: { message?: unknown };
+    message?: {
+      content?: Array<{ text?: unknown; type?: unknown }>;
+      isError?: unknown;
+      role?: unknown;
+      toolCallId?: unknown;
+      toolName?: unknown;
+    };
     type?: unknown;
   };
   try {
@@ -230,11 +253,56 @@ function parsePiEvent(line: string): CliChunk[] | null {
 
   if (event.type === 'message_update') {
     const update = event.assistantMessageEvent;
+
+    // 工具调用：参数流完了（toolcall_end 带完整 arguments）
+    if (update?.type === 'toolcall_end') {
+      const call = update.toolCall;
+      if (typeof call?.id === 'string' && typeof call.name === 'string') {
+        return [
+          {
+            kind: 'tool',
+            tool: {
+              input: call.arguments,
+              name: call.name,
+              state: 'input-available',
+              toolCallId: call.id,
+            },
+          },
+        ];
+      }
+      return [];
+    }
+
     const delta = typeof update?.delta === 'string' ? update.delta : '';
     if (!delta) return [];
     if (update?.type === 'thinking_delta') return [{ delta, kind: 'reasoning' }];
     if (update?.type === 'text_delta') return [{ delta, kind: 'text' }];
     return [];
+  }
+
+  // 工具结果：pi 会发一条 role=toolResult 的消息（message_end 是权威值）
+  if (event.type === 'message_end' && event.message?.role === 'toolResult') {
+    const { message } = event;
+    if (typeof message.toolCallId !== 'string' || typeof message.toolName !== 'string') return [];
+
+    const text = (message.content ?? [])
+      .map((block) => (block.type === 'text' && typeof block.text === 'string' ? block.text : ''))
+      .join('')
+      .trim();
+    const isError = message.isError === true;
+
+    return [
+      {
+        kind: 'tool',
+        tool: {
+          errorText: isError ? text || '工具执行失败' : undefined,
+          name: message.toolName,
+          output: isError ? undefined : text.slice(0, 4000),
+          state: isError ? 'output-error' : 'output-available',
+          toolCallId: message.toolCallId,
+        },
+      },
+    ];
   }
 
   if (event.type === 'error') {
