@@ -61,6 +61,16 @@ LobeHub 的"分支"是从消息开一个 thread；我们的等价实现：`POST 
 
 - **截断要按下标、不要按时间**：先按 `createdAt` 正序取全部消息，再 `slice(0, index + 1)`；用 `lte(createdAt)` 会在同毫秒的消息上多带。
 
+### 导出/备份（L2-15）
+
+侧栏会话行的"导出"按钮（改名和删除之间）→ Popover 选 `.md` 或 `.json`：
+
+- **纯逻辑**：`lib/export/topicExport.ts` —— `renderMarkdown`（标题 + 元信息 + 角色·时间 + 正文，推理包在 `<details>`）、`buildJsonPayload`（无损：完整 topic + 消息行含 reasoning/parts）、`exportFilename`（标题非法字符→`-`，限 60 字 + 日期）。
+- **接口**：`GET /api/topics/[id]/export?format=md|json` —— 返回 `Content-Disposition: attachment`；**中文文件名要同时给 ASCII 兜底 `filename` 和 `filename*=UTF-8''…`**（Node 会把头部里的非 Latin-1 字符替换掉，所以 ASCII 兜底里中文会变 `-`，属预期）。
+- **下载走前端 fetch → blob → `<a download>`**（不在 URL 上导航）：能 catch 失败弹 toast，也避开"点了没反应"的静默 404。
+- **Popover trigger 必须传 `nativeButton`**（trigger 是 `@lobehub/ui` 的 `Button` 时自动探测会失灵，Base UI 报 warning + dev 出 Issue 角标）；trigger 是 `Block` 这类 div 时传 `nativeButton={false}`（见 `ToolPicker`）。
+- 验收：`.md` 用编辑器打开中文不乱码；下载后有 `已导出 …` toast；失败路径 toast 报错。
+
 ## 验收（`docs/replica/04` 阶段 2）
 
 - [x] 刷新不丢（重载后消息从库里恢复）

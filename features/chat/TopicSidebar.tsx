@@ -1,12 +1,14 @@
 'use client';
 
-import { Button, Icon, Input, Text } from '@lobehub/ui';
-import { MessageSquarePlus, SquarePen, Trash2 } from 'lucide-react';
+import { Button, Icon, Input, Popover, Text } from '@lobehub/ui';
+import { toast } from '@lobehub/ui/base-ui';
+import { Download, FileJson, FileText, MessageSquarePlus, SquarePen, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
 
 import { Delayed } from '@/components/Delayed';
 import { ListSkeleton } from '@/components/ListSkeleton';
 import type { Agent, Topic } from '@/lib/db/schema';
+import { exportFilename, type ExportFormat } from '@/lib/export/topicExport';
 
 import { AgentSwitcher } from './AgentSwitcher';
 
@@ -21,12 +23,34 @@ interface TopicRowProps {
 const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete }: TopicRowProps) => {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [draft, setDraft] = useState(topic.title);
 
   const save = () => {
     const next = draft.trim();
     if (next && next !== topic.title) onRename(topic.id, next);
     setEditing(false);
+  };
+
+  /** 拉取导出内容并触发浏览器下载（失败 toast 提示）。 */
+  const download = async (format: ExportFormat) => {
+    setExportOpen(false);
+    try {
+      const res = await fetch(`/api/topics/${topic.id}/export?format=${format}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = exportFilename(topic.title, format);
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`已导出 ${format === 'json' ? 'JSON' : 'Markdown'}`);
+    } catch {
+      toast.error('导出失败，请重试');
+    }
   };
 
   return (
@@ -88,6 +112,52 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete }: TopicRow
           >
             <Icon icon={SquarePen} size={14} />
           </Button>
+          <Popover
+            content={
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: 6, width: 200 }}>
+                <Button
+                  block
+                  icon={<Icon icon={FileText} size={14} />}
+                  type="text"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void download('md');
+                  }}
+                >
+                  Markdown（.md）
+                </Button>
+                <Button
+                  block
+                  icon={<Icon icon={FileJson} size={14} />}
+                  type="text"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void download('json');
+                  }}
+                >
+                  JSON（.json）
+                </Button>
+                <Text style={{ fontSize: 11, opacity: 0.55, padding: '4px 8px' }} type="secondary">
+                  .md 用于阅读分享；.json 完整备份（含思考过程）
+                </Text>
+              </div>
+            }
+            open={exportOpen}
+            nativeButton
+            placement="bottom"
+            styles={{ content: { padding: 0 } }}
+            trigger="click"
+            onOpenChange={setExportOpen}
+          >
+            <Button
+              size="small"
+              title="导出"
+              type="text"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <Icon icon={Download} size={14} />
+            </Button>
+          </Popover>
           <Button
             size="small"
             title="删除"
