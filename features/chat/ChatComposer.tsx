@@ -7,6 +7,8 @@ import { useIsMobile } from '@/components/useMediaQuery';
 
 interface ChatComposerProps {
   busy: boolean;
+  /** 有待回答的提问时禁用输入（避免并发发消息；参考 refs：pending 时输入框不可用） */
+  disabled?: boolean;
   onChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
@@ -18,7 +20,7 @@ interface ChatComposerProps {
 
 /** 底部输入框：Enter 发送、Shift+Enter 换行；流式中变为停止按钮。 */
 export const ChatComposer = memo(
-  ({ busy, value, onChange, onSend, onStop, toolPicker }: ChatComposerProps) => {
+  ({ busy, disabled, value, onChange, onSend, onStop, toolPicker }: ChatComposerProps) => {
     const composingRef = useRef(false);
     const isMobile = useIsMobile();
     const canSend = value.trim().length > 0 && !busy;
@@ -41,7 +43,10 @@ export const ChatComposer = memo(
       >
         <TextArea
           autoSize={{ maxRows: 6, minRows: 1 }}
-          placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+          disabled={disabled}
+          placeholder={
+            disabled ? '请先回答上面的问题…' : '输入消息，Enter 发送，Shift+Enter 换行'
+          }
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onCompositionEnd={() => (composingRef.current = false)}
@@ -62,7 +67,7 @@ export const ChatComposer = memo(
               停止
             </Button>
           ) : (
-            <Button disabled={!canSend} size={buttonSize} type="primary" onClick={submit}>
+            <Button disabled={!canSend || disabled} size={buttonSize} type="primary" onClick={submit}>
               发送
             </Button>
           )}

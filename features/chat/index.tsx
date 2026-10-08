@@ -18,9 +18,11 @@ import { parseToolSettings, type ToolSetting } from '@/lib/tools/settings';
 import { BackBottom } from './BackBottom';
 import { ChatComposer } from './ChatComposer';
 import { EmptyState } from './EmptyState';
+import { findPendingQuestion } from './interventions';
 import { MessageItem } from './MessageItem';
 import type { MessageActionKey } from './MessageActions';
 import { MessageSkeleton } from './MessageSkeleton';
+import { QuestionBar } from './QuestionBar';
 import { TodoPanel } from './TodoPanel';
 import { ToolPicker } from './ToolPicker';
 import { TopicSidebar } from './TopicSidebar';
@@ -99,6 +101,8 @@ export function ChatView() {
   const busy = status === 'submitted' || status === 'streaming';
 
   const lastMessage = messages[messages.length - 1];
+  // 有待回答的提问时禁用输入框（避免并发发消息）
+  const hasPendingQuestion = Boolean(findPendingQuestion(messages));
   const waitingFirstToken =
     busy &&
     !(
@@ -585,8 +589,12 @@ export function ChatView() {
         {/* 任务清单面板（pi 的 todo 扩展；没有清单时自动隐藏） */}
         <TodoPanel messages={messages} />
 
+        {/* 提问栏（等待回答时出现；回答在这里完成，消息里只留结果） */}
+        <QuestionBar messages={messages} />
+
         <ChatComposer
           busy={busy}
+          disabled={hasPendingQuestion}
           toolPicker={
             <ToolPicker
               agentId={activeAgentId}

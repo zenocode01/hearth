@@ -81,6 +81,12 @@ export const MessageItem = memo(({ message, startedAt, busy, onAction }: Message
             if (isToolUIPart(part)) {
               const toolName =
                 part.type === 'dynamic-tool' ? part.toolName : part.type.slice('tool-'.length);
+
+              // 等待回答的提问：内联不渲染（表单在输入框上方的提问栏里，参考 refs 的 InterventionBar）
+              const awaiting = (part as { toolMetadata?: { awaiting?: boolean } }).toolMetadata
+                ?.awaiting;
+              if (awaiting && part.state === 'input-available') return null;
+
               return (
                 <ToolCard
                   errorText={part.errorText}

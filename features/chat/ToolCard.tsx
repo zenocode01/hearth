@@ -22,8 +22,6 @@ import {
 } from 'lucide-react';
 import { memo, useState } from 'react';
 
-import { QuestionForm } from './QuestionForm';
-
 /**
  * 工具调用卡片（参考 refs 的 Conversation 工具卡）：
  * - 一行标题：工具图标 + 中文名 + 关键参数摘要 + 状态（调用中/完成/失败）+ 折叠箭头
@@ -219,13 +217,11 @@ export const ToolCard = memo(({ toolName, input, output, errorText, state, toolM
             paddingLeft: 10,
           }}
         >
-          {/* 提问：等待用户回答时渲染表单（pi RPC 模式） */}
+          {/* 提问：等待回答时只给提示——表单在输入框上方的提问栏里（参考 refs 的 InterventionBar） */}
           {awaiting && questionMetadata ? (
-            <QuestionForm
-              input={input}
-              requestId={questionMetadata.requestId!}
-              runId={questionMetadata.runId!}
-            />
+            <div style={{ fontSize: 12, opacity: 0.7 }}>
+              等待回答 —— 在输入框上方的「需要你的回答」里选择
+            </div>
           ) : todos ? (
             <>
               {todos.length === 0 ? (
