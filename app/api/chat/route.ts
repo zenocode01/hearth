@@ -19,7 +19,7 @@ import { agents, messages as messagesTable, topics } from '@/lib/db/schema';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
 import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
 import { createRun, endRun, waitForQuestion } from '@/lib/llm/cliRuns';
-import { isPiCommand } from '@/lib/llm/piTools';
+import { buildPiToolFlags, isPiCommand } from '@/lib/llm/piTools';
 import { runPiRpcAgent } from '@/lib/llm/piRpc';
 import { chatTools, resolveChatTools } from '@/lib/llm/tools';
 import { enabledToolNames, parseToolSettings } from '@/lib/tools/settings';
@@ -170,6 +170,10 @@ export async function POST(req: Request) {
       .map((message) => ({ content: textOf(message), role: message.role as 'assistant' | 'user' }))
       .filter((item) => item.content);
 
+    // pi 的工具开关：会话里的开关 → `--tools +x` / `--exclude-tools y` 注入到命令
+    const piFlags = isPiCommand(command) ? buildPiToolFlags(toolSettings) : [];
+    const effectiveCommand = piFlags.length > 0 ? `${command} ${piFlags.join(' ')}` : command;
+
     const cliStream = createUIMessageStream({
       execute: async ({ writer }) => {
         const textId = createId('txt');
@@ -178,7 +182,7 @@ export async function POST(req: Request) {
         let reasoningOpen = false;
 
         // pi 的 RPC 模式（`--mode rpc`）：支持扩展的交互（question 等）
-        const useRpc = isPiCommand(command) && /--mode[=\s]+rpc\b/.test(command);
+        const useRpc = isPiCommand(effectiveCommand) && /--mode[=\s]+rpc\b/.test(effectiveCommand);
         const runId = createId('run');
         if (useRpc) createRun(runId);
 
@@ -239,7 +243,7 @@ export async function POST(req: Request) {
             history,
             question,
             // 模板里有 {{systemPrompt}} 就交给 CLI，没有则并进 prompt
-            systemPrompt: command.includes('{{systemPrompt}}') ? null : agent.systemPrompt,
+            systemPrompt: effectiveCommand.includes('{{systemPrompt}}') ? null : agent.systemPrompt,
           });
 
           const runner = useRpc
@@ -262,11 +266,11 @@ export async function POST(req: Request) {
 
                   return waitForQuestion(runId, request.id);
                 },
-                command,
+                command: effectiveCommand,
                 prompt: promptText,
                 systemPrompt: agent.systemPrompt,
               })
-            : runCliAgent({ command, prompt: promptText, systemPrompt: agent.systemPrompt });
+            : runCliAgent({ command: effectiveCommand, prompt: promptText, systemPrompt: agent.systemPrompt });
 
           for await (const chunk of runner) {
             writeChunk(chunk);

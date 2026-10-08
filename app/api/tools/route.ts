@@ -20,7 +20,7 @@ export function GET(req: Request) {
       const { enabledTools, settingsPath, tools } = listPiTools();
       return Response.json({
         enabledCount: enabledTools.length,
-        note: 'pi 的工具由 pi 自己管理：改 ~/.pi/agent/settings.json 的 defaultTools，或在命令模板里加 --tools / --exclude-tools。',
+        note: '开关随会话保存，运行时以 --tools +名字 / --exclude-tools 名字 注入到 pi；默认启用状态读自 pi 的 settings.json（改那里会影响所有会话）。',
         runtime: 'pi',
         settingsPath,
         tools,

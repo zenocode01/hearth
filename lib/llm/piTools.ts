@@ -73,11 +73,11 @@ function readPiSettings(): { defaultTools?: string[]; settingsPath: string } {
   }
 }
 
-/** 找最近修改过的会话文件（广告工具清单的来源）。 */
-function latestSessionFile(): string | null {
+/** 最近的会话文件（按修改时间倒序，供"广告工具清单"往回找）。 */
+function sessionFiles(): Array<{ mtime: number; path: string }> {
   const root = path.join(agentDir(), 'sessions');
   try {
-    if (!existsSync(root)) return null;
+    if (!existsSync(root)) return [];
     const files: Array<{ mtime: number; path: string }> = [];
 
     const walk = (dir: string, depth: number) => {
@@ -97,42 +97,49 @@ function latestSessionFile(): string | null {
     walk(root, 0);
 
     files.sort((a, b) => b.mtime - a.mtime);
-    return files[0]?.path ?? null;
+    return files;
   } catch {
-    return null;
+    return [];
   }
 }
 
-/** 从会话文件里抠出 system message 的 `<tools>` 段（`- name: 描述`）。 */
+/**
+ * 从会话文件里抠出 system message 的 `<tools>` 段（`- name: 描述`）。
+ *
+ * 注意：`--system-prompt` 会把默认系统提示整段替换掉（**连 `<tools>` 段一起**），
+ * 所以最近的几次运行可能都没有这个段 —— 要**往回找**最近一个"有 tools 段"的会话。
+ */
 function readAdvertisedTools(): { from: string | null; tools: PiToolInfo[] } {
-  const file = latestSessionFile();
-  if (!file) return { from: null, tools: [] };
+  const files = sessionFiles().slice(0, 20);
+  if (files.length === 0) return { from: null, tools: [] };
 
-  try {
-    const lines = readFileSync(file, 'utf8').split(/\r?\n/);
-    for (const line of lines) {
-      if (!line.includes('<tools>') || !line.includes('"sections"')) continue;
-      const parsed = JSON.parse(line) as { message?: { sections?: { tools?: unknown } } };
-      const text = parsed.message?.sections?.tools;
-      if (typeof text !== 'string') continue;
+  for (const file of files) {
+    try {
+      const lines = readFileSync(file.path, 'utf8').split(/\r?\n/);
+      for (const line of lines) {
+        if (!line.includes('<tools>') || !line.includes('"sections"')) continue;
+        const parsed = JSON.parse(line) as { message?: { sections?: { tools?: unknown } } };
+        const text = parsed.message?.sections?.tools;
+        if (typeof text !== 'string') continue;
 
-      const tools: PiToolInfo[] = [];
-      for (const match of text.matchAll(/^- ([a-zA-Z0-9_]+):\s*(.+)$/gm)) {
-        tools.push({
-          description: match[2].trim().slice(0, 240),
-          enabled: true,
-          label: match[1],
-          name: match[1],
-          source: 'extension',
-        });
+        const tools: PiToolInfo[] = [];
+        for (const match of text.matchAll(/^- ([a-zA-Z0-9_]+):\s*(.+)$/gm)) {
+          tools.push({
+            description: match[2].trim().slice(0, 240),
+            enabled: true,
+            label: match[1],
+            name: match[1],
+            source: 'extension',
+          });
+        }
+        if (tools.length > 0) return { from: file.path, tools };
       }
-      return { from: file, tools };
+    } catch {
+      /* 读不到就试下一个 */
     }
-  } catch {
-    /* 读不到就当没有 */
   }
 
-  return { from: file, tools: [] };
+  return { from: files[0]?.path ?? null, tools: [] };
 }
 
 /** 扫本地扩展源码里的 `registerTool({ name: "…" })`（只认字面量，够覆盖自建扩展）。 */
@@ -204,6 +211,26 @@ export function listPiTools(): PiToolList {
     settingsPath,
     tools: [...merged.values()],
   };
+}
+
+/**
+ * 把会话里的工具开关转成 pi 的 CLI 参数：
+ * - 开着的（`auto`）→ `--tools +name`（相对启用，pi 的默认设置不受影响）
+ * - 关掉的（`disabled`）→ `--exclude-tools name`
+ * 参考 pi 文档：`--tools` 只写 `+name`/`-name` 时是"相对修改"，`--exclude-tools` 在最后生效。
+ */
+export function buildPiToolFlags(
+  settings: Array<{ mode: 'auto' | 'disabled'; name: string }> | null | undefined,
+): string[] {
+  if (!settings?.length) return [];
+
+  const enable = settings.filter((item) => item.mode === 'auto').map((item) => `+${item.name}`);
+  const disable = settings.filter((item) => item.mode === 'disabled').map((item) => item.name);
+
+  const flags: string[] = [];
+  if (enable.length > 0) flags.push('--tools', enable.join(','));
+  if (disable.length > 0) flags.push('--exclude-tools', disable.join(','));
+  return flags;
 }
 
 /**

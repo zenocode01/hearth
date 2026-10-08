@@ -109,8 +109,17 @@ export const ToolPicker = memo(({ agentId, settings, onChange }: ToolPickerProps
   const disabledNames = new Set(
     (settings ?? []).filter((item) => item.mode === 'disabled').map((item) => item.name),
   );
+  const autoNames = new Set(
+    (settings ?? []).filter((item) => item.mode === 'auto').map((item) => item.name),
+  );
   const isBuiltin = payload.runtime === 'builtin';
-  const isEnabled = (tool: ToolItem) => (isBuiltin ? !disabledNames.has(tool.name) : tool.enabled);
+  const isPi = payload.runtime === 'pi';
+  /** 有效启用状态：会话开关优先，其次 pi 自己的设置（pi 默认 read/bash/edit/write） */
+  const isEnabled = (tool: ToolItem) => {
+    if (disabledNames.has(tool.name)) return false;
+    if (autoNames.has(tool.name)) return true;
+    return isBuiltin ? true : Boolean(tool.enabled);
+  };
   const enabledCount = payload.tools.filter(isEnabled).length;
 
   const toggle = (name: string, next: boolean) => {
@@ -150,7 +159,7 @@ export const ToolPicker = memo(({ agentId, settings, onChange }: ToolPickerProps
             {tool.description}
           </div>
         </div>
-        {isBuiltin ? (
+        {isBuiltin || isPi ? (
           <Switch checked={checked} size="small" onChange={(next) => toggle(tool.name, next)} />
         ) : (
           <Tag size="small" style={{ opacity: checked ? 1 : 0.45 }}>
@@ -190,12 +199,12 @@ export const ToolPicker = memo(({ agentId, settings, onChange }: ToolPickerProps
                   {payload.tools.map(row)}
                 </>
               ) : (
-                // pi：按来源分组（内置 / 扩展），参考 LobeHub 按来源分组的列表
+                // pi：按来源分组（内置 / 扩展）；开关随会话保存，运行时注入 --tools / --exclude-tools
                 <>
                   {payload.tools.some((tool) => tool.source === 'builtin') && (
                     <>
                       <div style={{ fontSize: 11, opacity: 0.45, padding: '6px 8px 2px' }}>
-                        内置工具（pi 侧配置）
+                        内置工具（可开关，随会话保存）
                       </div>
                       {payload.tools.filter((tool) => tool.source !== 'extension').map(row)}
                     </>
@@ -203,7 +212,7 @@ export const ToolPicker = memo(({ agentId, settings, onChange }: ToolPickerProps
                   {payload.tools.some((tool) => tool.source === 'extension') && (
                     <>
                       <div style={{ fontSize: 11, opacity: 0.45, padding: '6px 8px 2px' }}>
-                        扩展工具（本地扩展 / npm 包，已注册即可用）
+                        扩展工具（本地扩展 / npm 包）
                       </div>
                       {payload.tools.filter((tool) => tool.source === 'extension').map(row)}
                     </>

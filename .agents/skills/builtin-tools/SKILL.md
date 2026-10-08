@@ -91,6 +91,17 @@ pi 的事件流里有完整的工具协议（**实测**，`pi -p --mode json` �
   - 回答后：pending 消失 → 栏自动卸载 → 内联位置恢复渲染工具结果（`output-available` + 答案）——同一份数据两处渲染，但**同一时刻只有一处**。
 - **预设**：`pi --mode rpc --system-prompt "{{systemPrompt}}"`（question 能力的前提）。
 
+## pi 工具的开关（`--tools` / `--exclude-tools` 注入）
+
+- **UI**：`ToolPicker` 对 pi 也渲染开关（会话级，和内置工具同一套 `topics.tools`）。有效状态 = 会话覆盖优先，其次 pi 的 `settings.json`（默认 read/bash/edit/write）。
+- **注入**（`buildPiToolFlags` + 路由的 CLI 分支）：会话里的 `auto` → `--tools +name`（**相对添加**），`disabled` → `--exclude-tools name`（最后生效）；把参数**追加到命令模板末尾**即可（工具名是字母数字，无引号问题）。
+- **pi 的语义（文档 + 实测）**：
+  - `--tools a,b,c`（普通名字）= **整体替换**选择集；**`--tools +a,-b`（只有 +/- 条目）= 相对修改**；两种**不能混用** ✅（实测 `--tools +grep`、`--exclude-tools write`、两者并用都按预期生效）。
+  - 用错形式（如把 `+grep` 当普通名字）会把工具集替换成空 → **system prompt 里连 `<tools>` 段都没有**（模型仍然能调，但提示词里不再列出）。
+- **坑：`--system-prompt` 会替换整段默认系统提示（含 `<tools>` 段）**。所以：
+  - 不能靠"最新会话文件"拿"已启用工具"——要**往回扫最近若干次会话**找那个有 `<tools>` 段的（`sessionFiles().slice(0, 20)`）；
+  - `<tools>` 段只是**提示**，真正的工具声明走模型 API，所以有 `--system-prompt` 时行为照旧（实测 grep/ls 开关都能被模型调用）。
+
 ## 关键决定与坑（都踩过）
 
 - **用 `jsonSchema()` 不用 zod**：zod 只是 `ai` 的传递依赖，项目依赖清单里没有（守则：新依赖先问用户）。`jsonSchema<T>({ type:'object', properties, required })` 一样能给 `execute` 推断出入参类型。
