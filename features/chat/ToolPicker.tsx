@@ -1,68 +1,92 @@
 'use client';
 
-import { Block, Flexbox, Icon, Popover, Text } from '@lobehub/ui';
+import { Block, Flexbox, Icon, Popover, Tag, Text } from '@lobehub/ui';
 import { Switch } from '@lobehub/ui/base-ui';
-import { Blocks, Calculator, ChevronDown, Clock, Globe, Wrench, type LucideIcon } from 'lucide-react';
+import { Blocks, Calculator, ChevronDown, Clock, FileSearch, FolderTree, Globe, Pencil, Play, Search, Terminal, Wrench, type LucideIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useState } from 'react';
 
 import type { ToolSetting } from '@/lib/tools/settings';
 
 interface ToolItem {
   description: string;
+  /** pi 工具才有：实时读自 pi 的 settings.json */
+  enabled?: boolean;
   label: string;
   name: string;
 }
 
-/** 工具图标（按工具名；未知工具用扳手兜底） */
+interface ToolPayload {
+  enabledCount?: number;
+  note?: string;
+  runtime: 'builtin' | 'external' | 'pi';
+  settingsPath?: string;
+  tools: ToolItem[];
+}
+
+/** 图标：Hearth 内置工具 + pi 自带工具 */
 const TOOL_ICONS: Record<string, LucideIcon> = {
+  // Hearth 内置
   calculate: Calculator,
   fetch_url: Globe,
   get_current_time: Clock,
+  // pi 自带
+  bash: Terminal,
+  edit: Pencil,
+  find: FileSearch,
+  grep: Search,
+  ls: FolderTree,
+  powershell: Play,
+  read: FileSearch,
+  write: Pencil,
 };
 
 interface ToolPickerProps {
-  /** 当前开关（[] 或 null = 全部自动启用） */
+  /** 当前会话的 Agent（决定显示哪套工具：内置 / pi 自带 / 外部 CLI 自管） */
+  agentId?: string | null;
+  /** 内置工具的开关（[] 或 null = 全部自动启用） */
   onChange: (settings: ToolSetting[]) => void;
   settings: ToolSetting[] | null;
 }
 
 /**
  * 输入框上的「工具」入口（参考 refs 的 ChatInput/ActionBar/Tools）：
- * 点开是 Popover 列表——按启用状态分组，每行一个开关；关掉的工具不会发给模型。
+ * - 内置模型 → Hearth 内置工具，可开关（随会话保存）
+ * - 外部 CLI = pi → **pi 自带的工具**（启用状态实时读 pi 的 settings.json，只读展示）
+ * - 其它外部 CLI → 说明工具由该 CLI 自己管理
  */
-export const ToolPicker = memo(({ settings, onChange }: ToolPickerProps) => {
+export const ToolPicker = memo(({ agentId, settings, onChange }: ToolPickerProps) => {
   const [open, setOpen] = useState(false);
-  const [catalog, setCatalog] = useState<ToolItem[]>([]);
+  const [payload, setPayload] = useState<ToolPayload>({ runtime: 'builtin', tools: [] });
 
-  // 目录来自服务端（与给模型的定义同一来源，见 lib/llm/tools.ts 的 TOOL_CATALOG）。
-  // 失败不置空——打开面板时会再补拉一次（dev 首次编译可能超时）。
-  const loadCatalog = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/tools');
+      const query = agentId ? `?agentId=${encodeURIComponent(agentId)}` : '';
+      const res = await fetch(`/api/tools${query}`);
       if (!res.ok) return;
-      const data = (await res.json()) as { tools?: ToolItem[] };
-      setCatalog(data.tools ?? []);
+      setPayload((await res.json()) as ToolPayload);
     } catch {
       /* 打开面板时会重试 */
     }
-  }, []);
+  }, [agentId]);
 
   useEffect(() => {
-    void loadCatalog();
-  }, [loadCatalog]);
+    void load();
+  }, [load]);
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
       setOpen(next);
-      if (next && catalog.length === 0) void loadCatalog();
+      if (next) void load();
     },
-    [catalog.length, loadCatalog],
+    [load],
   );
 
   const disabledNames = new Set(
     (settings ?? []).filter((item) => item.mode === 'disabled').map((item) => item.name),
   );
-  const enabledCount = catalog.filter((tool) => !disabledNames.has(tool.name)).length;
+  const isBuiltin = payload.runtime === 'builtin';
+  const isEnabled = (tool: ToolItem) => (isBuiltin ? !disabledNames.has(tool.name) : tool.enabled);
+  const enabledCount = payload.tools.filter(isEnabled).length;
 
   const toggle = (name: string, next: boolean) => {
     const modes = new Map((settings ?? []).map((item) => [item.name, item.mode]));
@@ -75,12 +99,9 @@ export const ToolPicker = memo(({ settings, onChange }: ToolPickerProps) => {
     onChange(list.every((item) => item.mode === 'auto') ? [] : list);
   };
 
-  const enabled = catalog.filter((tool) => !disabledNames.has(tool.name));
-  const disabled = catalog.filter((tool) => disabledNames.has(tool.name));
-
   const row = (tool: ToolItem) => {
     const Icon = TOOL_ICONS[tool.name] ?? Wrench;
-    const checked = !disabledNames.has(tool.name);
+    const checked = isEnabled(tool);
     return (
       <div
         key={tool.name}
@@ -104,44 +125,63 @@ export const ToolPicker = memo(({ settings, onChange }: ToolPickerProps) => {
             {tool.description}
           </div>
         </div>
-        <Switch checked={checked} size="small" onChange={(next) => toggle(tool.name, next)} />
+        {isBuiltin ? (
+          <Switch checked={checked} size="small" onChange={(next) => toggle(tool.name, next)} />
+        ) : (
+          <Tag size="small" style={{ opacity: checked ? 1 : 0.45 }}>
+            {checked ? '已启用' : '未启用'}
+          </Tag>
+        )}
       </div>
     );
   };
 
-  const section = (title: string, tools: ToolItem[]) =>
-    tools.length > 0 && (
-      <div>
-        <div style={{ fontSize: 11, opacity: 0.45, padding: '6px 8px 2px' }}>{title}</div>
-        {tools.map(row)}
-      </div>
-    );
+  const triggerLabel = isBuiltin
+    ? `工具 ${enabledCount}/${payload.tools.length || '…'}`
+    : payload.runtime === 'pi'
+      ? `pi 工具 ${enabledCount}/${payload.tools.length || '…'}`
+      : '工具';
 
   return (
     <Popover
       content={
-        <div style={{ display: 'flex', flexDirection: 'column', padding: 6, width: 320 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', padding: 6, width: 340 }}>
           <Flexbox align="center" horizontal justify="space-between" style={{ padding: '4px 8px' }}>
-            <Text style={{ fontSize: 13, fontWeight: 600 }}>工具</Text>
+            <Text style={{ fontSize: 13, fontWeight: 600 }}>
+              {payload.runtime === 'pi' ? 'pi 自带的工具' : '工具'}
+            </Text>
             <Text style={{ fontSize: 11.5 }} type="secondary">
-              {enabledCount}/{catalog.length} 已启用
+              {payload.tools.length > 0 ? `${enabledCount}/${payload.tools.length} 已启用` : ''}
             </Text>
           </Flexbox>
 
-          {section('已启用', enabled)}
-          {section('已禁用', disabled)}
+          {payload.tools.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, opacity: 0.45, padding: '6px 8px 2px' }}>
+                {isBuiltin ? '可开关（随会话保存）' : 'pi 侧配置'}
+              </div>
+              {payload.tools.map(row)}
+            </div>
+          )}
 
-          <div
-            style={{
-              borderTop: '1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.08))',
-              fontSize: 11.5,
-              marginTop: 6,
-              opacity: 0.55,
-              padding: '8px 8px 2px',
-            }}
-          >
-            工具由模型自行决定何时调用；关掉的不会发给模型。开关随会话保存。
-          </div>
+          {(payload.note || payload.settingsPath) && (
+            <div
+              style={{
+                borderTop: '1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.08))',
+                fontSize: 11.5,
+                lineHeight: 1.6,
+                marginTop: 6,
+                opacity: 0.55,
+                padding: '8px 8px 2px',
+                wordBreak: 'break-all',
+              }}
+            >
+              {payload.note}
+              {payload.settingsPath && payload.runtime === 'pi' && (
+                <div style={{ marginTop: 2 }}>配置：{payload.settingsPath}</div>
+              )}
+            </div>
+          )}
         </div>
       }
       nativeButton={false}
@@ -153,9 +193,7 @@ export const ToolPicker = memo(({ settings, onChange }: ToolPickerProps) => {
     >
       <Block align="center" clickable gap={6} horizontal padding={6} title="工具" variant="borderless">
         <Icon icon={Blocks} size={16} />
-        <Text style={{ fontSize: 12.5 }}>
-          工具 {enabledCount}/{catalog.length || '…'}
-        </Text>
+        <Text style={{ fontSize: 12.5 }}>{triggerLabel}</Text>
         <Icon icon={ChevronDown} size={12} style={{ opacity: 0.5 }} />
       </Block>
     </Popover>

@@ -31,6 +31,24 @@ AI 能在对话中主动调用「内置工具」，结果回填给模型继续�
 - 目录与工具定义**同一来源**（`TOOL_CATALOG` 从 `chatTools` 的定义里读 label/description/参数），避免两处漂移。
 - 新会话的开关先记在客户端，建 topic 时带上（与 agentId 同一套路）。
 
+## pi 自带的工具（外部 CLI 运行时）
+
+Agent 走**外部 CLI = pi** 时，工具是 pi 自己的（Hearth 的内置工具与它无关），所以列表要显示 **pi 的工具**：
+
+- **清单来源**：pi 官方文档 `docs/settings.md#tools`（随包安装：`node_modules/@earendil-works/pi-coding-agent/docs/`）——
+  内置 = `read` / `bash` / `powershell`（仅 Windows）/ `edit` / `write` / `grep` / `find` / `ls`；
+  `defaultTools` 默认 = `read`, `bash`, `edit`, `write`。
+- **启用状态是实时读的**：`~/.pi/agent/settings.json` 的 `defaultTools`（读不到就按默认 4 个）。
+- **实现**：`lib/llm/piTools.ts`（`isPiCommand` 去掉 `KEY=value` 前缀后看第一个 token；`listPiTools` 读 settings）。
+- **API**：`GET /api/tools?agentId=` 按运行时返回三种：
+  | runtime | 含义 | UI |
+  |---|---|---|
+  | `builtin` | Hearth 内置工具 | 可开关（随会话保存） |
+  | `pi` | pi 自带工具 | 只读：`已启用/未启用` 标签 + 说明 + settings 路径 |
+  | `external` | 其它 CLI（opencode 等） | 空清单 + 「工具由它自己管理」说明 |
+- **pi 侧怎么改**：`~/.pi/agent/settings.json` 的 `defaultTools`，或命令模板里加 `--tools` / `--exclude-tools` / `--no-builtin-tools`（pi 支持这些参数，我们没代改）。
+- **清单会过期**：pi 升级新增工具时 `PI_BUILTIN_TOOLS` 要跟着更新（未知工具仍会原样展示，不会丢）。
+
 ## 关键决定与坑（都踩过）
 
 - **用 `jsonSchema()` 不用 zod**：zod 只是 `ai` 的传递依赖，项目依赖清单里没有（守则：新依赖先问用户）。`jsonSchema<T>({ type:'object', properties, required })` 一样能给 `execute` 推断出入参类型。

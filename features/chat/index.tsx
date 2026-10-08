@@ -573,6 +573,7 @@ export function ChatView() {
           busy={busy}
           toolPicker={
             <ToolPicker
+              agentId={activeAgentId}
               settings={toolSettings}
               onChange={(next) => void handleToolChange(next)}
             />
