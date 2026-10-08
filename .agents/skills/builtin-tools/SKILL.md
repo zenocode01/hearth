@@ -64,6 +64,29 @@ pi 的事件流里有完整的工具协议（**实测**，`pi -p --mode json` �
 - `ToolCard` 的 `TOOL_META` 里补了 pi 工具的中文名与图标（read=读取文件 / bash=执行命令 / edit=编辑文件 / write=写入文件 / grep=搜索内容 / find=查找文件 / ls=列目录 / powershell=PowerShell）；参数摘要会优先取 `command` / `path` / `pattern` / `glob` 等键。
 - 注意：CLI 分支**不调用** `convertToModelMessages`（pi 自己管上下文，我们只把文本历史拼进 prompt），所以 CLI 的工具片段没有"回传给模型"的问题。
 
+## todo 与 question（pi 扩展的交互）
+
+### todo（清单）
+
+- **数据**：pi 的 `todo` 扩展把**完整清单**放在工具结果的 `details` 里：`{ action, todos: [{id, text, done}], nextId }`；解析器把它作为 `toolMetadata` 传进工具片段并**随消息持久化**（`StoredPart.toolMetadata`）。
+- **UI 两处**：
+  - 工具卡片：`toolName === 'todo'` 时渲染 ✓/○ 清单（默认展开，摘要显示 `N/M 已完成`）；
+  - 输入框上方 `features/chat/TodoPanel.tsx`：取**最近一次**清单（进度 + 可折叠列表），清单为空（pi 全部完成会自动清空）就整块隐藏。
+- **坑**：找"最近一次"要**消息和片段都从后往前**扫（一次回复可能连着调多次 todo；只从前往后扫会拿到第一条 0/1）。
+
+### question（向用户提问）
+
+- **前提：必须用 RPC 模式**。`-p --mode json` 没有 UI（`ctx.hasUI=false`），question 扩展会直接返回错误；`--mode rpc` 下 `hasUI=true`，走 `ctx.ui.select / input` 的**对话协议**。
+- **协议**（`lib/llm/piRpc.ts`）：
+  - 提示词走 stdin：`{"type":"prompt","message":"…"}`（所以模板**不要有 `{{prompt}}`**，运行器会明确报错）；
+  - 会话事件与 json 模式相同 → 复用 `parsePiEvent`；
+  - `extension_ui_request`：`select/input/confirm/editor` 是**阻塞对话**（要回 `extension_ui_response`），`notify/setWidget/…` 直接忽略；
+  - `agent_settled` = 这一轮结束。
+- **坑（踩过）**：对话请求**不能立即异步处理**——那时 `toolcall_end` 还在队列里没被上层消费，`pendingQuestion` 是 null，awaiting 标记无处可挂，扩展收到 `cancelled`（表现为"User cancelled the selection"）。正确做法：把对话请求也**入队**，在生成器里按顺序 `await handleDialog(...)`。
+- **等待回答的桥**（参考 refs 的 AskUserBridge）：`lib/llm/cliRuns.ts` 注册表（globalThis 保活）→ 路由的 `askUser` 把 `{ awaiting: true, requestId, runId }` 写进 pending 的 `question` 工具片段 → `POST /api/cli-runs/[id]/answer` → `resolveQuestion` → 运行器写回 pi → **原进程继续**（不新开一轮对话）→ 随后正常吐 toolResult。
+- **UI**：`features/chat/QuestionForm.tsx`（选项按钮 + 描述 + 自由输入 + 取消，提交后显示"已提交…等待 pi 继续"），由 `ToolCard` 在 `state==='input-available' && toolMetadata.awaiting` 时渲染，标题状态显示「等待回答…」。
+- **预设**：`pi --mode rpc --system-prompt "{{systemPrompt}}"`（question 能力的前提）。
+
 ## 关键决定与坑（都踩过）
 
 - **用 `jsonSchema()` 不用 zod**：zod 只是 `ai` 的传递依赖，项目依赖清单里没有（守则：新依赖先问用户）。`jsonSchema<T>({ type:'object', properties, required })` 一样能给 `execute` 推断出入参类型。
