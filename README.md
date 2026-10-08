@@ -49,10 +49,20 @@ npm run mock:llm
 > 构建脚本带 `--webpack`：本机 E: 盘创建 junction 报错（os error 1392），Turbopack 会构建失败；
 > 磁盘修复（管理员运行 `chkdsk E: /f`）后可去掉 `--webpack` 切回。
 
+## 功能
+
+- **聊天**：流式逐字 + Markdown/代码高亮 + 推理过程（思考块）+ 会话管理（改名/删除/分支/重新生成）
+- **Agent**：多人设（人设/头像/模型/温度），头像可用 `@lobehub/icons` 的品牌 logo
+- **模型**：任何 OpenAI 兼容接口（OpenAI / 通义 / DeepSeek / 本地 llama.cpp…）
+- **工具调用**：内置计算器 / 当前时间 / 抓网页，聊天里显示工具卡片，可按会话开关
+- **外部 CLI Agent**：把消息交给本机的 `pi` / `opencode` / `claude` 执行；与 **pi** 深度集成——
+  思考流、工具卡片、todo 清单、question 提问（可在输入框上方直接回答）、工具开关
+- **主题与体验**：深浅色 + 切换动画、空/加载/错误三态、启动占位、手机竖屏适配
+
 ## 技术栈（家用配方）
 
-Next.js 16（App Router）+ TypeScript + @lobehub/ui + antd + Vercel AI SDK（流式聊天）。
-后续阶段按需加入：SQLite + Drizzle（持久化）。
+Next.js 16（App Router）+ TypeScript + `@lobehub/ui` + antd + Vercel AI SDK（流式/工具调用）
++ SQLite + Drizzle（持久化）。构建用 webpack（原因见上）。
 
 ## 项目文档
 
@@ -63,5 +73,19 @@ Next.js 16（App Router）+ TypeScript + @lobehub/ui + antd + Vercel AI SDK（�
 
 ## 当前阶段
 
-阶段 1 完成（见 `docs/replica/04`）：聊天 + 流式回复 + Markdown/代码高亮 + 可读错误。
-下一步阶段 2：会话持久化（SQLite + Drizzle，刷新不丢）。
+- **阶段 0~4 已完成**（见 `docs/replica/04`）：骨架+主题、流式聊天、SQLite 持久化、Agent 管理、打磨（三态/响应式）
+- **阶段 5 进行中**：✅ 工具调用（L2-11）；⏭️ 图片生成（L2-10）已跳过
+- **额外**：外部 CLI Agent 集成（尤其 pi 的思考/工具/清单/提问/开关）
+
+进度与"下一步"的完整交接说明见 **`docs/HANDOFF.md`**。
+
+## 许可证
+
+本项目采用 **Apache License 2.0**（见 [`LICENSE`](./LICENSE)）。
+
+关于参考与依赖的边界（合规红线）：
+
+- 本项目是**独立实现**，只把 LobeHub 当**设计参考**（"学思路，自己写代码"），**不包含** LobeHub 的源码；
+- `refs/`（LobeHub / lobe-icons 源码快照）是本地**只读参考书**，**不入库、不参与构建、不 import**；
+- 运行时使用 MIT 协议的 `@lobehub/ui`、`@lobehub/icons`；
+- "LobeHub" 名称与 LOGO 归其所有者，本项目与 LobeHub 官方无关联。
