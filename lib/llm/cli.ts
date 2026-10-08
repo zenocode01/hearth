@@ -225,8 +225,10 @@ function stripAnsi(value: string): string {
  * turn_end / agent_end / tool_* …），所以**不做类型白名单**——凡是带 type 的 JSON
  * 行都当协议事件；只有 message_update 里的 delta 才是给用户看的内容，其余一律丢弃。
  * 否则新的事件类型会整段漏进正文（踩过：turn_end / agent_end）。
+ *
+ * 也被 RPC 模式复用（`lib/llm/piRpc.ts`）——两种模式共享同一套会话事件。
  */
-function parsePiEvent(line: string): CliChunk[] | null {
+export function parsePiEvent(line: string): CliChunk[] | null {
   const trimmed = line.trim();
   if (!trimmed.startsWith('{')) return null;
 
@@ -298,6 +300,8 @@ function parsePiEvent(line: string): CliChunk[] | null {
       {
         kind: 'tool',
         tool: {
+          // pi 扩展的 details（如 todo 的完整清单）——给 UI 渲染专属卡片
+          details: message.details,
           errorText: isError ? text || '工具执行失败' : undefined,
           name: message.toolName,
           output: isError ? undefined : text.slice(0, 4000),

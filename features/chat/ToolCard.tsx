@@ -111,15 +111,23 @@ function formatValue(value: unknown): string {
   }
 }
 
-export const ToolCard = memo(({ toolName, input, output, errorText, state }: ToolCardProps) => {
-  const [open, setOpen] = useState(false);
+export const ToolCard = memo(({ toolName, input, output, errorText, state, toolMetadata }: ToolCardProps) => {
+  // pi 的 todo 扩展把完整清单放在 details 里 → 用清单卡片渲染（默认展开）
+  const todoMetadata =
+    toolName === 'todo'
+      ? (toolMetadata as { todos?: Array<{ done: boolean; id: number; text: string }> } | undefined)
+      : undefined;
+  const todos = Array.isArray(todoMetadata?.todos) ? todoMetadata.todos : null;
+
+  const [open, setOpen] = useState(Boolean(todos?.length));
   const meta = TOOL_META[toolName] ?? { icon: Wrench, label: toolName };
 
   const running = state === 'input-streaming' || state === 'input-available';
   const failed = state === 'output-error';
   const statusLabel = running ? '调用中…' : failed ? '失败' : '已完成';
-  const summary = summarizeInput(input);
-  const hasBody = input != null || output != null || Boolean(errorText);
+  const doneCount = todos?.filter((todo) => todo.done).length ?? 0;
+  const summary = todos ? `${doneCount}/${todos.length} 已完成` : summarizeInput(input);
+  const hasBody = input != null || output != null || Boolean(errorText) || Boolean(todos);
 
   return (
     <div style={{ margin: '6px 0' }}>
@@ -199,21 +207,46 @@ export const ToolCard = memo(({ toolName, input, output, errorText, state }: Too
             paddingLeft: 10,
           }}
         >
-          {input != null && (
-            <div>
-              <span style={{ opacity: 0.7 }}>参数：</span>
-              <span style={{ whiteSpace: 'pre-wrap' }}>{formatValue(input)}</span>
-            </div>
-          )}
-          {errorText ? (
-            <div style={{ color: 'var(--ant-color-error, #ff4d4f)' }}>错误：{errorText}</div>
+          {/* todo：直接渲染清单（比原始 JSON 好读） */}
+          {todos ? (
+            <>
+              {todos.length === 0 ? (
+                <div style={{ opacity: 0.7 }}>清单已清空（全部完成）</div>
+              ) : (
+                todos.map((todo) => (
+                  <div key={todo.id} style={{ alignItems: 'flex-start', display: 'flex', gap: 8 }}>
+                    <span style={{ flex: 'none', width: 14 }}>{todo.done ? '✓' : '○'}</span>
+                    <span
+                      style={{
+                        opacity: todo.done ? 0.5 : 1,
+                        textDecoration: todo.done ? 'line-through' : undefined,
+                      }}
+                    >
+                      #{todo.id} {todo.text}
+                    </span>
+                  </div>
+                ))
+              )}
+            </>
           ) : (
-            output != null && (
-              <div>
-                <span style={{ opacity: 0.7 }}>结果：</span>
-                <span style={{ whiteSpace: 'pre-wrap' }}>{formatValue(output)}</span>
-              </div>
-            )
+            <>
+              {input != null && (
+                <div>
+                  <span style={{ opacity: 0.7 }}>参数：</span>
+                  <span style={{ whiteSpace: 'pre-wrap' }}>{formatValue(input)}</span>
+                </div>
+              )}
+              {errorText ? (
+                <div style={{ color: 'var(--ant-color-error, #ff4d4f)' }}>错误：{errorText}</div>
+              ) : (
+                output != null && (
+                  <div>
+                    <span style={{ opacity: 0.7 }}>结果：</span>
+                    <span style={{ whiteSpace: 'pre-wrap' }}>{formatValue(output)}</span>
+                  </div>
+                )
+              )}
+            </>
           )}
         </div>
       )}

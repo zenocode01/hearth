@@ -21,6 +21,7 @@ import { EmptyState } from './EmptyState';
 import { MessageItem } from './MessageItem';
 import type { MessageActionKey } from './MessageActions';
 import { MessageSkeleton } from './MessageSkeleton';
+import { TodoPanel } from './TodoPanel';
 import { ToolPicker } from './ToolPicker';
 import { TopicSidebar } from './TopicSidebar';
 
@@ -580,6 +581,9 @@ export function ChatView() {
             </span>
           </div>
         )}
+
+        {/* 任务清单面板（pi 的 todo 扩展；没有清单时自动隐藏） */}
+        <TodoPanel messages={messages} />
 
         <ChatComposer
           busy={busy}
