@@ -15,6 +15,7 @@ export type StoredPart =
       output?: unknown;
       state: string;
       toolCallId: string;
+      toolMetadata?: unknown;
       toolName: string;
       type: 'tool';
     };
@@ -43,6 +44,7 @@ export function serializeParts(parts: UIMessage['parts']): StoredPart[] {
       output?: unknown;
       state: string;
       toolCallId: string;
+      toolMetadata?: unknown;
       toolName?: string;
     };
     stored.push({
@@ -51,6 +53,7 @@ export function serializeParts(parts: UIMessage['parts']): StoredPart[] {
       output: tool.output,
       state: tool.state,
       toolCallId: tool.toolCallId,
+      toolMetadata: tool.toolMetadata,
       toolName: tool.toolName ?? String(part.type).slice('tool-'.length),
       type: 'tool',
     });
@@ -70,6 +73,7 @@ export function deserializeParts(stored: StoredPart[]): UIMessage['parts'] {
       output: part.output,
       state: part.state,
       toolCallId: part.toolCallId,
+      toolMetadata: part.toolMetadata,
       type: `tool-${part.toolName}`,
     };
   });

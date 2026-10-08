@@ -2,17 +2,37 @@
 
 import { Block, Flexbox, Icon, Popover, Tag, Text } from '@lobehub/ui';
 import { Switch } from '@lobehub/ui/base-ui';
-import { Blocks, Calculator, ChevronDown, Clock, FileSearch, FolderTree, Globe, Pencil, Play, Search, Terminal, Wrench, type LucideIcon } from 'lucide-react';
+import {
+  Blocks,
+  Calculator,
+  ChevronDown,
+  Clock,
+  FilePlus,
+  FileSearch,
+  FileText,
+  FolderTree,
+  Globe,
+  ListChecks,
+  MessageCircleQuestion,
+  Pencil,
+  Play,
+  Search,
+  Terminal,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react';
 import { memo, useCallback, useEffect, useState } from 'react';
 
 import type { ToolSetting } from '@/lib/tools/settings';
 
 interface ToolItem {
   description: string;
-  /** pi 工具才有：实时读自 pi 的 settings.json */
+  /** pi 工具才有：实时读自 pi 的 settings.json / 会话文件 */
   enabled?: boolean;
   label: string;
   name: string;
+  /** pi 才有：内置还是扩展（本地扩展 / npm 包） */
+  source?: 'builtin' | 'extension';
 }
 
 interface ToolPayload {
@@ -23,7 +43,7 @@ interface ToolPayload {
   tools: ToolItem[];
 }
 
-/** 图标：Hearth 内置工具 + pi 自带工具 */
+/** 图标：Hearth 内置工具 + pi 自带工具 + 扩展工具 */
 const TOOL_ICONS: Record<string, LucideIcon> = {
   // Hearth 内置
   calculate: Calculator,
@@ -36,8 +56,13 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   grep: Search,
   ls: FolderTree,
   powershell: Play,
-  read: FileSearch,
-  write: Pencil,
+  read: FileText,
+  write: FilePlus,
+  // 常见 pi 扩展
+  question: MessageCircleQuestion,
+  todo: ListChecks,
+  web_search: Search,
+  fetch_content: Globe,
 };
 
 interface ToolPickerProps {
@@ -157,10 +182,34 @@ export const ToolPicker = memo(({ agentId, settings, onChange }: ToolPickerProps
 
           {payload.tools.length > 0 && (
             <div>
-              <div style={{ fontSize: 11, opacity: 0.45, padding: '6px 8px 2px' }}>
-                {isBuiltin ? '可开关（随会话保存）' : 'pi 侧配置'}
-              </div>
-              {payload.tools.map(row)}
+              {isBuiltin ? (
+                <>
+                  <div style={{ fontSize: 11, opacity: 0.45, padding: '6px 8px 2px' }}>
+                    可开关（随会话保存）
+                  </div>
+                  {payload.tools.map(row)}
+                </>
+              ) : (
+                // pi：按来源分组（内置 / 扩展），参考 LobeHub 按来源分组的列表
+                <>
+                  {payload.tools.some((tool) => tool.source === 'builtin') && (
+                    <>
+                      <div style={{ fontSize: 11, opacity: 0.45, padding: '6px 8px 2px' }}>
+                        内置工具（pi 侧配置）
+                      </div>
+                      {payload.tools.filter((tool) => tool.source !== 'extension').map(row)}
+                    </>
+                  )}
+                  {payload.tools.some((tool) => tool.source === 'extension') && (
+                    <>
+                      <div style={{ fontSize: 11, opacity: 0.45, padding: '6px 8px 2px' }}>
+                        扩展工具（本地扩展 / npm 包，已注册即可用）
+                      </div>
+                      {payload.tools.filter((tool) => tool.source === 'extension').map(row)}
+                    </>
+                  )}
+                </>
+              )}
             </div>
           )}
 

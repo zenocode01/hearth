@@ -190,6 +190,9 @@ export async function POST(req: Request) {
               writer.write({
                 output: tool.output,
                 toolCallId: tool.toolCallId,
+                // pi 扩展的 details（如 todo 清单）——UI 用它渲染专属卡片。
+                // `JSONObject` 类型没从 'ai' 导出，这里按 JSON 值直传（运行时就是个普通对象）
+                toolMetadata: tool.details as never,
                 type: 'tool-output-available',
               });
             } else {

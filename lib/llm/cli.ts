@@ -201,6 +201,8 @@ export type CliChunk =
         toolCallId: string;
         /** input-available：参数已到齐；output-available / output-error：执行结果 */
         state: 'input-available' | 'output-available' | 'output-error';
+        /** 工具自带的展示元信息（pi 扩展的 details，如 todo 清单） */
+        details?: unknown;
         errorText?: string;
         input?: unknown;
         output?: string;
@@ -237,6 +239,7 @@ function parsePiEvent(line: string): CliChunk[] | null {
     error?: { message?: unknown };
     message?: {
       content?: Array<{ text?: unknown; type?: unknown }>;
+      details?: unknown;
       isError?: unknown;
       role?: unknown;
       toolCallId?: unknown;

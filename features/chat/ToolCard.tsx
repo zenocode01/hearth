@@ -11,6 +11,8 @@ import {
   FileText,
   FolderTree,
   Globe,
+  ListChecks,
+  MessageCircleQuestion,
   Pencil,
   Play,
   Search,
@@ -31,6 +33,8 @@ interface ToolCardProps {
   output?: unknown;
   state: string;
   toolCallId: string;
+  /** 工具自带的展示元信息（pi 扩展的 details，如 todo 清单） */
+  toolMetadata?: unknown;
   toolName: string;
 }
 
@@ -48,6 +52,13 @@ const TOOL_META: Record<string, { icon: LucideIcon; label: string }> = {
   powershell: { icon: Play, label: 'PowerShell' },
   read: { icon: FileText, label: '读取文件' },
   write: { icon: FilePlus, label: '写入文件' },
+  // 常见 pi 扩展工具
+  fetch_content: { icon: Globe, label: '抓取内容' },
+  get_search_content: { icon: Globe, label: '读取抓取结果' },
+  question: { icon: MessageCircleQuestion, label: '向用户提问' },
+  source_check: { icon: Search, label: '来源核查' },
+  todo: { icon: ListChecks, label: '任务清单' },
+  web_search: { icon: Search, label: '网页搜索' },
 };
 
 const Chevron = ({ open }: { open: boolean }) => (

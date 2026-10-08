@@ -89,6 +89,7 @@ export const MessageItem = memo(({ message, startedAt, busy, onAction }: Message
                   output={part.output}
                   state={part.state}
                   toolCallId={part.toolCallId}
+                  toolMetadata={part.toolMetadata}
                   toolName={toolName}
                 />
               );
