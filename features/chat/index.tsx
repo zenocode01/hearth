@@ -306,10 +306,16 @@ export function ChatView() {
           // 先删库里的旧回复再重新生成，避免刷新后新旧两条都在（必须等删除完成）
           await fetch(`/api/messages/${message.id}`, { method: 'DELETE' });
           requestStartedAtRef.current = Date.now();
-          void regenerate({
-            body: activeTopicId ? { topicId: activeTopicId } : undefined,
-            messageId: message.id,
-          });
+          try {
+            await regenerate({
+              body: activeTopicId ? { topicId: activeTopicId } : undefined,
+              messageId: message.id,
+            });
+          } catch {
+            // 消息可能已不存在（另一个标签页删过 / 本地状态过期）——别抛未处理异常，重新拉一次历史
+            toast.error('这条消息已不存在，已重新加载会话');
+            setHistoryAttempt((count) => count + 1);
+          }
           break;
         }
         case 'branch': {
@@ -345,10 +351,16 @@ export function ChatView() {
     [activeTopicId, refreshTopics, regenerate, setMessages],
   );
 
-  const handleRetry = useCallback(() => {
+  const handleRetry = useCallback(async () => {
     clearError();
     requestStartedAtRef.current = Date.now();
-    void regenerate({ body: activeTopicId ? { topicId: activeTopicId } : undefined });
+    try {
+      await regenerate({ body: activeTopicId ? { topicId: activeTopicId } : undefined });
+    } catch {
+      // 同上：消息可能已被删除，别抛未处理异常
+      toast.error('这条消息已不存在，已重新加载会话');
+      setHistoryAttempt((count) => count + 1);
+    }
   }, [activeTopicId, clearError, regenerate]);
 
   /** 历史消息加载失败后的重试 */
@@ -558,7 +570,7 @@ export function ChatView() {
             <span>{error.message}</span>
             <span style={{ display: 'flex', flexShrink: 0, gap: 8 }}>
               {messages.length > 0 && (
-                <Button size="small" onClick={handleRetry}>
+                <Button size="small" onClick={() => void handleRetry()}>
                   重试
                 </Button>
               )}
