@@ -84,7 +84,11 @@ pi 的事件流里有完整的工具协议（**实测**，`pi -p --mode json` �
   - `agent_settled` = 这一轮结束。
 - **坑（踩过）**：对话请求**不能立即异步处理**——那时 `toolcall_end` 还在队列里没被上层消费，`pendingQuestion` 是 null，awaiting 标记无处可挂，扩展收到 `cancelled`（表现为"User cancelled the selection"）。正确做法：把对话请求也**入队**，在生成器里按顺序 `await handleDialog(...)`。
 - **等待回答的桥**（参考 refs 的 AskUserBridge）：`lib/llm/cliRuns.ts` 注册表（globalThis 保活）→ 路由的 `askUser` 把 `{ awaiting: true, requestId, runId }` 写进 pending 的 `question` 工具片段 → `POST /api/cli-runs/[id]/answer` → `resolveQuestion` → 运行器写回 pi → **原进程继续**（不新开一轮对话）→ 随后正常吐 toolResult。
-- **UI**：`features/chat/QuestionForm.tsx`（选项按钮 + 描述 + 自由输入 + 取消，提交后显示"已提交…等待 pi 继续"），由 `ToolCard` 在 `state==='input-available' && toolMetadata.awaiting` 时渲染，标题状态显示「等待回答…」。
+- **UI（学 LobeHub 的 InterventionBar，单一渲染位）**：
+  - `features/chat/interventions.ts` 的 `findPendingQuestion(messages)` 从消息里**派生**出等待回答的提问（不另存状态）；
+  - `features/chat/QuestionBar.tsx`：挂在**输入框上方**，有 pending 时出现（选项按钮 + 描述 + 自由输入 + 取消，复用 `QuestionForm`）；
+  - **pending 时内联工具行不渲染**（`MessageItem` 直接 `return null`），输入框**禁用**（占位符"请先回答上面的问题…"，防止并发发消息）；
+  - 回答后：pending 消失 → 栏自动卸载 → 内联位置恢复渲染工具结果（`output-available` + 答案）——同一份数据两处渲染，但**同一时刻只有一处**。
 - **预设**：`pi --mode rpc --system-prompt "{{systemPrompt}}"`（question 能力的前提）。
 
 ## 关键决定与坑（都踩过）
