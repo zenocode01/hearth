@@ -21,7 +21,7 @@
 ## 2. 现在在哪（进度）
 
 - **阶段 0~4 全部完成**：骨架 + 主题动画 · 流式聊天 · SQLite 持久化 · Agent 管理 · 打磨（三态/启动占位/响应式）
-- **阶段 5 进行中**：✅ **L2-11 工具调用**（内置工具 + 工具卡片 + 开关）；⏭️ 用户明确**跳过 L2-10 图片生成**
+- **阶段 5 进行中**：✅ **L2-11 工具调用**（内置工具 + 工具卡片 + 开关）；✅ **L2-15 导出/备份**（侧栏导出 .md/.json）；⏭️ 用户明确**跳过 L2-10 图片生成**
 - **额外（超出原路线图）**：**外部 CLI Agent** 深度集成（pi / opencode / claude），尤其是 **pi**：
   思考流、工具卡片、todo 清单、question 提问、工具开关
 
@@ -37,6 +37,7 @@
 | todo UI | `a1246fe` | 工具卡片渲染 ✓/○ 清单 + 输入框上方**任务清单面板**（清单在工具结果 `details` 里，随消息持久化） |
 | question UI | `36f0d1e` `bedbdf9` | **RPC 模式**运行器 + 对话协议 + 等待回答的注册表/接口 + **输入框上方的提问栏**（pending 时内联不渲染、输入框禁用） |
 | 改名 & 打磨 | `5dfec42` `be49ef3` `0a9e978` `e5e8dd1` | pi-web → **Hearth**（含内部前缀迁移）；移动端响应式；三态 + 启动占位 + 路由级 loading/预取 |
+| 导出/备份 L2-15 | `173e78c` | 侧栏会话行导出按钮（Popover 选 .md/.json，fetch→blob 下载 + toast）；`GET /api/topics/[id]/export` 附件下载（中文文件名 `filename*`）；`lib/export/topicExport` 纯逻辑（md 含推理 details、json 无损） |
 
 ## 4. 关键文件地图（本轮重点）
 
@@ -51,6 +52,8 @@
 | `lib/db/messageParts.ts` | 消息片段与 AI SDK 的双向映射（刻意解耦，SDK 升级不污染历史） |
 | `app/api/chat/route.ts` | 聊天主路由：API 分支（工具）/ CLI 分支（json 或 RPC）/ 落库 |
 | `app/api/tools/route.ts` | 按运行时返回工具目录（builtin / pi / external） |
+| `app/api/topics/[id]/export/route.ts` | 会话导出（?format=md\|json，附件下载） |
+| `lib/export/topicExport.ts` | 导出纯逻辑：Markdown 渲染 / JSON 备份 / 文件名清洗 |
 | `app/api/cli-runs/[id]/answer/route.ts` | 提交"提问"的答案 |
 | `features/chat/` | `index.tsx`（主视图）、`ToolCard`、`ToolPicker`、`TodoPanel`、`QuestionBar`、`QuestionForm`、`interventions.ts` |
 | `features/agent/` | Agent 列表/编辑页、`AgentAvatar`、`agentIcons`（品牌头像）、骨架 |
@@ -88,14 +91,13 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
 - **MCP（L2-12）**：未做。`ToolCard` 已能渲染 `dynamic-tool`，接入时可直接复用。
 - **提问栏只支持单个 pending**：LobeHub 有 tab 切换 + 批量批准 + 跨会话 island（`InterventionBar`），我们只做了"单一渲染位"。
 - **pi 工具开关**：`grep` 做过行为验证；`powershell/ls/find` 机制相同但未逐一实测。
-- **i18n（L2-8）/ 导出（L2-15）**：未做。
+- **i18n（L2-8）**：未做。
 - 移动端只做了竖屏主流程（消息操作按钮仍是小尺寸）。
 
 ## 8. 下一步建议（挑一个）
 
 1. **MCP 接入（L2-12）**：把 MCP server 的工具转成 `dynamicTool`，UI 复用 ToolCard；参考 `refs/lobe-chat/packages/heterogeneous-agents/src/mcp`。
-2. **导出/备份（L2-15）**：会话一键导 `.md`/`.json`（~100 行）。
-3. **个人记忆（L2-13）**：`user_memory` 表 + "我的记忆"页 + 对话前拼进提示词。
-4. **对齐 LobeHub 的提问栏**：多 pending tab + 批量批准 + 跨会话提示。
+2. **个人记忆（L2-13）**：`user_memory` 表 + "我的记忆"页 + 对话前拼进提示词。
+3. **对齐 LobeHub 的提问栏**：多 pending tab + 批量批准 + 跨会话提示。
 
 > 工作节奏见 `vibe-coding-discipline` skill：**小步**（一次一个小功能）、随时能跑、验收后立刻 commit、约定变了先改 AGENTS.md/skill。
