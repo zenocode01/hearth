@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { AsyncBoundary } from '@/components/AsyncBoundary';
 import { ListSkeleton } from '@/components/ListSkeleton';
+import { useIsMobile } from '@/components/useMediaQuery';
 import type { Agent } from '@/lib/db/schema';
 
 import { AgentAvatar } from './AgentAvatar';
@@ -18,6 +19,7 @@ export function AgentList() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const isMobile = useIsMobile();
   const router = useRouter();
 
   /** silent：删除后静默刷新（不闪骨架、失败也不把列表换成错误页） */
@@ -45,8 +47,22 @@ export function AgentList() {
   };
 
   return (
-    <Flexbox gap={16} style={{ margin: '0 auto', maxWidth: 880, padding: 24, width: '100%' }}>
-      <Flexbox align="center" horizontal justify="space-between">
+    <Flexbox
+      gap={16}
+      style={{
+        margin: '0 auto',
+        maxWidth: 880,
+        padding: isMobile ? 16 : 24,
+        width: '100%',
+      }}
+    >
+      {/* 窄屏：标题与按钮分两行（否则挤在一起） */}
+      <Flexbox
+        align={isMobile ? 'flex-start' : 'center'}
+        gap={isMobile ? 10 : 0}
+        horizontal={!isMobile}
+        justify="space-between"
+      >
         <Text style={{ fontSize: 20, fontWeight: 600 }}>Agent 管理</Text>
         <Flexbox gap={8} horizontal>
           <Button
@@ -106,7 +122,7 @@ export function AgentList() {
                     </Tooltip>
                   )}
                 </Flexbox>
-                <Text style={{ fontSize: 12 }} type="secondary">
+                <Text ellipsis style={{ fontSize: 12 }} type="secondary">
                   {agent.runtime === 'cli'
                     ? `外部 CLI · ${agent.cliCommand || '未配置命令'}`
                     : (agent.model || '默认模型') +

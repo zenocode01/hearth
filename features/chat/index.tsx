@@ -5,10 +5,12 @@ import { Button, Flexbox, Icon, Text, copyToClipboard } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
 import { ThinkIcon } from '@lobehub/ui/icons';
 import type { UIMessage } from 'ai';
+import { PanelLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ThemeControls } from '@/components/ThemeControls';
+import { useIsMobile } from '@/components/useMediaQuery';
 import type { Agent, ChatMessage, Topic } from '@/lib/db/schema';
 
 import { BackBottom } from './BackBottom';
@@ -34,7 +36,10 @@ export function ChatView() {
   const [historyAttempt, setHistoryAttempt] = useState(0);
   /** 输入框草稿（受控：支持"放回输入框"） */
   const [draft, setDraft] = useState('');
+  /** 手机端：侧栏抽屉是否打开 */
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const isMobile = useIsMobile();
   const router = useRouter();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -118,6 +123,7 @@ export function ChatView() {
   /** 切换 Agent：已有会话则落库（换人设立即生效），否则记在本地等建会话时带上。 */
   const handleAgentChange = useCallback(
     async (agentId: string) => {
+      setSidebarOpen(false);
       const next = agentId || null;
       setActiveAgentId(next);
       if (activeTopicId) {
@@ -317,6 +323,7 @@ export function ChatView() {
   const handleCreate = useCallback(() => {
     stop();
     clearError();
+    setSidebarOpen(false);
     setActiveTopicId(null);
     setMessages([]);
   }, [clearError, setMessages, stop]);
@@ -326,6 +333,7 @@ export function ChatView() {
       if (id === activeTopicId) return;
       stop();
       clearError();
+      setSidebarOpen(false);
       setActiveTopicId(id);
     },
     [activeTopicId, clearError, stop],
@@ -357,35 +365,81 @@ export function ChatView() {
 
   return (
     <div style={{ display: 'flex', height: '100dvh' }}>
-      <TopicSidebar
-        activeAgentId={activeAgentId}
-        activeId={activeTopicId}
-        agents={agents}
-        topics={topics}
-        onAgentChange={(id) => void handleAgentChange(id)}
-        onCreate={handleCreate}
-        onDelete={(id) => void handleDelete(id)}
-        onManageAgents={() => router.push('/agents')}
-        onRename={(id, title) => void handleRename(id, title)}
-        onRetryTopics={() => void refreshTopics({ silent: false })}
-        onSelect={handleSelect}
-        topicsError={topicsStatus === 'error'}
-        topicsLoading={topicsStatus === 'loading'}
-      />
+      {isMobile ? (
+        <>
+          {sidebarOpen && (
+            <div
+              aria-hidden
+              className="hearth-backdrop"
+              onClick={() => setSidebarOpen(false)}
+            />
+          )}
+          <div className="hearth-drawer" data-open={sidebarOpen} inert={!sidebarOpen}>
+            <TopicSidebar
+              activeAgentId={activeAgentId}
+              activeId={activeTopicId}
+              agents={agents}
+              topics={topics}
+              width="min(82vw, 300px)"
+              onAgentChange={(id) => void handleAgentChange(id)}
+              onCreate={handleCreate}
+              onDelete={(id) => void handleDelete(id)}
+              onManageAgents={() => {
+                setSidebarOpen(false);
+                router.push('/agents');
+              }}
+              onRename={(id, title) => void handleRename(id, title)}
+              onRetryTopics={() => void refreshTopics({ silent: false })}
+              onSelect={handleSelect}
+              topicsError={topicsStatus === 'error'}
+              topicsLoading={topicsStatus === 'loading'}
+            />
+          </div>
+        </>
+      ) : (
+        <TopicSidebar
+          activeAgentId={activeAgentId}
+          activeId={activeTopicId}
+          agents={agents}
+          topics={topics}
+          onAgentChange={(id) => void handleAgentChange(id)}
+          onCreate={handleCreate}
+          onDelete={(id) => void handleDelete(id)}
+          onManageAgents={() => router.push('/agents')}
+          onRename={(id, title) => void handleRename(id, title)}
+          onRetryTopics={() => void refreshTopics({ silent: false })}
+          onSelect={handleSelect}
+          topicsError={topicsStatus === 'error'}
+          topicsLoading={topicsStatus === 'loading'}
+        />
+      )}
 
       <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minWidth: 0 }}>
-        {/* 顶栏：主题控件在这里（不悬浮、不遮挡内容）。 */}
+        {/* 顶栏：主题控件在这里（不悬浮、不遮挡内容）；手机上左侧是抽屉开关。 */}
         <div
           style={{
             alignItems: 'center',
             borderBottom: '1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06))',
             display: 'flex',
             flexShrink: 0,
+            gap: 8,
             justifyContent: 'space-between',
-            padding: '8px 16px',
+            padding: '8px 12px',
+            paddingTop: 'max(8px, env(safe-area-inset-top))',
           }}
         >
-          <Text style={{ fontSize: 16, fontWeight: 600 }}>Hearth</Text>
+          {isMobile && (
+            <Button
+              aria-label="打开会话列表"
+              icon={<Icon icon={PanelLeft} size={18} />}
+              size="large"
+              type="text"
+              onClick={() => setSidebarOpen(true)}
+            />
+          )}
+          <Text style={{ flex: isMobile ? 1 : undefined, fontSize: 16, fontWeight: 600 }}>
+            Hearth
+          </Text>
           <ThemeControls />
         </div>
 

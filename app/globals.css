@@ -80,6 +80,47 @@ html[data-theme='dark'] .hearth-boot {
   }
 }
 
+/*
+ * 移动端：侧栏抽屉 + 遮罩（ChatView 在窄屏把 240px 侧栏变成抽屉，参考 refs 的移动端导航）
+ */
+.hearth-backdrop {
+  animation: hearth-fade-in 0.18s ease;
+  background: rgba(0, 0, 0, 0.45);
+  inset: 0;
+  position: fixed;
+  z-index: 90;
+}
+
+.hearth-drawer {
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  top: 0;
+  transform: translateX(-100%);
+  transition: transform 0.22s ease;
+  z-index: 91;
+}
+
+.hearth-drawer[data-open='true'] {
+  transform: none;
+}
+
+@keyframes hearth-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hearth-drawer {
+    transition: none;
+  }
+}
+
 /* 消息区滚动条：细一点、跟随主题、悬停加深（Windows 默认滚动条较粗且不随主题） */.hearth-scroll {
   scrollbar-color: var(--ant-color-fill, rgba(0, 0, 0, 0.15)) transparent;
   scrollbar-width: thin;

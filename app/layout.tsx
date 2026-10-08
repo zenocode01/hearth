@@ -12,6 +12,13 @@ export const metadata = {
   title: 'Hearth',
 };
 
+/** 手机端：允许内容延伸到刘海/手势条区域（配合 CSS 的 env(safe-area-inset-*)） */
+export const viewport = {
+  initialScale: 1,
+  viewportFit: 'cover' as const,
+  width: 'device-width' as const,
+};
+
 function isThemeMode(value: string | undefined): value is ThemeMode {
   return value === 'auto' || value === 'light' || value === 'dark';
 }

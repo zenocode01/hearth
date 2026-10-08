@@ -53,9 +53,18 @@ description: 'Use for theming with @lobehub/ui tokens, dark/light mode, antd-sty
 
 ## 验收（`docs/replica/04` 阶段 4）
 
-- [ ] 深浅色切换正常，无残留白块
-- [ ] 每个页面都有空/加载/错误三态
-- [ ] 移动端竖屏可用（响应式）
+- [x] 深浅色切换正常，无残留白块
+- [x] 每个页面都有空/加载/错误三态
+- [x] 移动端竖屏可用（响应式）
+
+## 移动端适配（阶段 4 已落地）
+
+- **断点与 hook**：`components/useMediaQuery.ts` 的 `useIsMobile()`（`max-width: 767px`）。本项目组件大量用**内联样式**，CSS 类覆盖不了 → 布局差异用 hook 条件渲染（`horizontal={!isMobile}`），只有遮罩/抽屉这类纯视觉的才写 CSS。
+- **聊天页**：窄屏把 240px 侧栏变成**抽屉**（`hearth-drawer` + `hearth-backdrop`，CSS 在 globals.css）；顶栏加汉堡按钮；选中会话/新建/切 Agent/进管理页**自动关抽屉**。桌面完全不变。
+- **主题控件**：窄屏收成一个图标按钮 + Popover（两组带文字的 Segmented 在 375px 下放不下）。
+- **触控与安全区**：主按钮在手机上 `size="large"`（40px 级）；底部输入区与悬浮坞用 `env(safe-area-inset-bottom)`；`app/layout.tsx` 导出 `viewport: { viewportFit: 'cover' }` 让 env() 生效。
+- **路由级骨架同步适配**：`app/chat/loading.tsx` 用同一个 hook 决定是否渲染侧栏骨架（否则手机加载态会闪出一个不存在的侧栏）。
+- **验证手法（重要）**：桌面浏览器里开一个 **390×844 的 iframe** 指向同一个 URL——iframe 的视口会让 `matchMedia` 和 CSS 媒体查询都按手机宽度生效，然后用 `contentDocument` 断言（抽屉 `data-open`、汉堡存在、`scrollWidth - innerWidth` 检查横向溢出、点开/选会话后是否自动关）。这比拖窗口可靠，也不用真机。**注意**：改代码触发的热重载会把 iframe 清掉，测试中间别改文件。
 
 ## 常见翻车
 

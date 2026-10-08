@@ -3,6 +3,8 @@
 import { Button, Flexbox, TextArea } from '@lobehub/ui';
 import { memo, useRef } from 'react';
 
+import { useIsMobile } from '@/components/useMediaQuery';
+
 interface ChatComposerProps {
   busy: boolean;
   onChange: (value: string) => void;
@@ -15,7 +17,10 @@ interface ChatComposerProps {
 /** 底部输入框：Enter 发送、Shift+Enter 换行；流式中变为停止按钮。 */
 export const ChatComposer = memo(({ busy, value, onChange, onSend, onStop }: ChatComposerProps) => {
   const composingRef = useRef(false);
+  const isMobile = useIsMobile();
   const canSend = value.trim().length > 0 && !busy;
+  // 触摸设备上把主按钮做大到 40px（触控目标）
+  const buttonSize = isMobile ? 'large' : 'middle';
 
   const submit = () => {
     if (canSend) onSend();
@@ -29,6 +34,8 @@ export const ChatComposer = memo(({ busy, value, onChange, onSend, onStop }: Cha
       style={{
         borderTop: '1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06))',
         padding: 12,
+        // 手机底部安全区（home indicator / 手势条）
+        paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
       }}
     >
       <TextArea
@@ -46,11 +53,11 @@ export const ChatComposer = memo(({ busy, value, onChange, onSend, onStop }: Cha
         }}
       />
       {busy ? (
-        <Button danger onClick={onStop}>
+        <Button danger size={buttonSize} onClick={onStop}>
           停止
         </Button>
       ) : (
-        <Button disabled={!canSend} type="primary" onClick={submit}>
+        <Button disabled={!canSend} size={buttonSize} type="primary" onClick={submit}>
           发送
         </Button>
       )}

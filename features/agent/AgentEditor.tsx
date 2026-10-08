@@ -21,6 +21,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { AsyncBoundary } from '@/components/AsyncBoundary';
+import { useIsMobile } from '@/components/useMediaQuery';
 import type { Agent } from '@/lib/db/schema';
 
 import { AgentAvatar } from './AgentAvatar';
@@ -102,6 +103,7 @@ export function AgentEditor({ id }: AgentEditorProps) {
   const [loadStatus, setLoadStatus] = useState<'error' | 'loading' | 'ready'>(
     isNew ? 'ready' : 'loading',
   );
+  const isMobile = useIsMobile();
 
   // 编辑已有 Agent：加载（失败可重试）
   const loadAgent = useCallback(async () => {
@@ -186,7 +188,7 @@ export function AgentEditor({ id }: AgentEditorProps) {
   if (loadStatus === 'loading') return <AgentEditorSkeleton />;
   if (loadStatus === 'error') {
     return (
-      <Flexbox style={{ margin: '0 auto', maxWidth: 760, padding: 24, width: '100%' }}>
+      <Flexbox style={{ margin: '0 auto', maxWidth: 760, padding: isMobile ? 16 : 24, width: '100%' }}>
         <AsyncBoundary error loading={false} onRetry={() => void loadAgent()}>
           {null}
         </AsyncBoundary>
@@ -195,7 +197,7 @@ export function AgentEditor({ id }: AgentEditorProps) {
   }
 
   return (
-    <Flexbox gap={16} style={{ margin: '0 auto', maxWidth: 760, padding: 24, width: '100%' }}>
+    <Flexbox gap={16} style={{ margin: '0 auto', maxWidth: 760, padding: isMobile ? 16 : 24, width: '100%' }}>
       {/* 顶栏 */}
       <Flexbox align="center" horizontal justify="space-between">
         <Flexbox align="center" gap={4} horizontal>
@@ -229,7 +231,7 @@ export function AgentEditor({ id }: AgentEditorProps) {
       {/* 基本信息 */}
       <Flexbox gap={16} style={cardStyle}>
         <Text style={{ fontSize: 13, fontWeight: 600 }}>基本信息</Text>
-        <Flexbox align="flex-start" gap={16} horizontal>
+        <Flexbox align="flex-start" gap={16} horizontal={!isMobile}>
           <Field label="头像">
             <EmojiPicker
               allowUpload={false}
@@ -240,7 +242,7 @@ export function AgentEditor({ id }: AgentEditorProps) {
               onChange={(emoji) => setAvatar(emoji)}
             />
           </Field>
-          <Flexbox flex={1} gap={14}>
+          <Flexbox flex={1} gap={14} style={{ width: isMobile ? '100%' : undefined }}>
             <Field label="名称">
               <Input
                 placeholder="例如：资深后端工程师"
@@ -325,7 +327,7 @@ export function AgentEditor({ id }: AgentEditorProps) {
         />
 
         {runtime === 'api' ? (
-          <Flexbox align="flex-start" gap={24} horizontal>
+          <Flexbox align="flex-start" gap={24} horizontal={!isMobile}>
             <Flexbox flex={1}>
               <Field label="模型">
                 <Select

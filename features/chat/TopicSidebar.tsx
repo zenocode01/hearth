@@ -121,6 +121,8 @@ interface TopicSidebarProps {
   topics: Topic[];
   topicsError: boolean;
   topicsLoading: boolean;
+  /** 面板宽度（桌面 240；手机抽屉里可放宽） */
+  width?: number | string;
 }
 
 /** 左侧栏：顶部 Agent 切换器 + 新建对话 + 会话列表（切换 / 改名 / 删除）。 */
@@ -139,16 +141,19 @@ export const TopicSidebar = memo(
     onRetryTopics,
     topicsError,
     topicsLoading,
+    width = 240,
   }: TopicSidebarProps) => (
     <div
       style={{
+        background: 'var(--ant-color-bg-container, #fff)',
         borderRight: '1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06))',
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
         gap: 8,
+        height: '100%',
         padding: 8,
-        width: 240,
+        width,
       }}
     >
       {/* Agent 切换器放在会话列表上方（与 LobeHub 一致） */}

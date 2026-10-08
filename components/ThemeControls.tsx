@@ -1,12 +1,13 @@
 'use client';
 
-import { Flexbox, Icon, Segmented, Text } from '@lobehub/ui';
+import { Block, Flexbox, Icon, Popover, Segmented, Text } from '@lobehub/ui';
 import { MonitorCog, Moon, Sun, type LucideIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import type { ThemeMode } from './theme';
 import { useThemeControls } from './themeContext';
 import type { ThemeTransitionEffect } from './themeTransition';
+import { useIsMobile } from './useMediaQuery';
 
 const modeOption = (icon: LucideIcon, label: string): ReactNode => (
   <span style={{ alignItems: 'center', display: 'inline-flex', gap: 6 }}>
@@ -27,8 +28,14 @@ const EFFECT_OPTIONS: Array<{ label: string; value: ThemeTransitionEffect }> = [
   { label: '无', value: 'none' },
 ];
 
-/** 主题控件本体（不定位）：放到顶栏或悬浮坞里由页面决定。 */
-export function ThemeControls() {
+const MODE_ICON: Record<ThemeMode, LucideIcon> = {
+  auto: MonitorCog,
+  dark: Moon,
+  light: Sun,
+};
+
+/** 桌面：两行完整控件 */
+function ThemeControlsFull() {
   const { effect, mode, setEffect, setMode } = useThemeControls();
 
   return (
@@ -52,4 +59,56 @@ export function ThemeControls() {
       </Flexbox>
     </Flexbox>
   );
+}
+
+/**
+ * 移动端：收成一个图标按钮（渐进披露）——顶栏放不下「跟随系统/浅色/深色 + 动画」两组文字控件，
+ * 点开是同一个面板。触发器不能用 <button>（base-ui 要求 nativeButton={false}）。
+ */
+function ThemeControlsCompact() {
+  const { effect, mode, setEffect, setMode } = useThemeControls();
+  const [open, setOpen] = useState(false);
+  const CurrentIcon = MODE_ICON[mode];
+
+  return (
+    <Popover
+      content={
+        <Flexbox align="flex-end" gap={10} style={{ padding: 10 }}>
+          <Segmented
+            block={false}
+            options={MODE_OPTIONS}
+            value={mode}
+            onChange={(value) => setMode(value as ThemeMode)}
+          />
+          <Flexbox align="center" gap={6} horizontal>
+            <Text style={{ fontSize: 12 }} type="secondary">
+              切换动画
+            </Text>
+            <Segmented
+              size="small"
+              options={EFFECT_OPTIONS}
+              value={effect}
+              onChange={(value) => setEffect(value as ThemeTransitionEffect)}
+            />
+          </Flexbox>
+        </Flexbox>
+      }
+      nativeButton={false}
+      open={open}
+      placement="bottomRight"
+      styles={{ content: { padding: 0 } }}
+      trigger="click"
+      onOpenChange={setOpen}
+    >
+      <Block align="center" clickable gap={6} horizontal padding={8} title="外观设置" variant="borderless">
+        <Icon icon={CurrentIcon} size={16} />
+      </Block>
+    </Popover>
+  );
+}
+
+/** 主题控件本体（不定位）：放到顶栏或悬浮坞里由页面决定；窄屏自动收起。 */
+export function ThemeControls() {
+  const isMobile = useIsMobile();
+  return isMobile ? <ThemeControlsCompact /> : <ThemeControlsFull />;
 }
