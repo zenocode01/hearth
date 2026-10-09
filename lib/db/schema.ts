@@ -64,3 +64,36 @@ export const messages = sqliteTable(
 export type Agent = typeof agents.$inferSelect;
 export type Topic = typeof topics.$inferSelect;
 export type ChatMessage = typeof messages.$inferSelect;
+
+/**
+ * 会话上下文压缩摘要表（2026-10-09）。
+ *
+ * 为什么单独一张表而不是往 topics 上加一列：压缩是**滚动**的——每压一次就多一段摘要，
+ * 一列只能存"最新一段"，历史摘要会丢（也会丢掉"压到哪条消息"的水位线）。
+ *
+ * 一条记录 = "从会话开头到 `throughMessageId`（含）为止的历史，已被 `content` 概括"。
+ * 原消息**不删**，UI 仍可展开查看/撤销；只是发给模型时用摘要替代。
+ */
+export const topicSummaries = sqliteTable(
+  'topic_summaries',
+  {
+    id: text('id').primaryKey(),
+    topicId: text('topic_id')
+      .notNull()
+      .references(() => topics.id, { onDelete: 'cascade' }),
+    /** 摘要正文（滚动：新摘要 = 旧摘要 + 新增历史 再压一次） */
+    content: text('content').notNull(),
+    /** 水位线：这条摘要覆盖到哪条消息（含）。防重复压缩、也能判断要不要再压 */
+    throughMessageId: text('through_message_id').notNull(),
+    /** 本次压缩掉的消息条数（UI 展示"已压缩 N 条"） */
+    compressedCount: integer('compressed_count').notNull().default(0),
+    /** 压缩前的 token 估算（UI 展示 + 调阈值用） */
+    tokenCount: integer('token_count'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    index('topic_summaries_topic_created_at_idx').on(table.topicId, table.createdAt),
+  ],
+);
+
+export type TopicSummary = typeof topicSummaries.$inferSelect;
