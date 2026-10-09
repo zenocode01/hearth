@@ -2,6 +2,8 @@ import { convertToModelMessages, type ModelMessage, type UIMessage } from 'ai';
 
 import {
   extOf,
+  FILE_INLINE_MAX_CHARS,
+  FILE_PREVIEW_CHARS,
   isOfficeOrPdf,
   isTextFile,
   MAX_TEXT_CHARS_PER_FILE,
@@ -50,6 +52,33 @@ function otherPartsOf(message: UIMessage) {
  *
  * 三类来源：纯文本直接读；docx/xlsx/pptx/pdf 抽文本（C 期）；都不行就给一句人话提示。
  */
+/**
+ * 超长正文 → "预览 + 明确声明"（学 LobeChat 的 `previewLongFileContent`）。
+ *
+ * 为什么要这么讲究：附件内容会随每一轮一起进 prompt，一次塞进去几十万字符，
+ * 之后这个会话每条消息都会失败，压缩历史也救不回来。所以超限时**只给前几千字**，
+ * 并**明说这是预览、没有工具能读剩余部分**——让模型据此作答并主动提示用户，
+ * 而不是把截断后的内容当成完整文件来推理。
+ */
+function buildFileBody(text: string): string {
+  if (text.length <= FILE_INLINE_MAX_CHARS) return text;
+  const preview = text.slice(0, FILE_PREVIEW_CHARS);
+  return (
+    `${preview}\n\n` +
+    `[注意：以上是文件的前 ${FILE_PREVIEW_CHARS} 字预览，完整内容约 ${text.length} 字，` +
+    `此处没有读取剩余部分的工具。请基于预览回答，并在结论依赖被省略部分时提醒用户。]`
+  );
+}
+
+/**
+ * 当前轮的文本类附件 → `<file name="x.md">…</file>` 文本块。
+ *
+ * 为什么转成**文本段**而不是 file part：provider 对 `data.type === 'text'` 的 file part
+ * 直接抛错（UnsupportedFunctionalityError）。这个 `<file name>` 包裹沿用 pi 的约定，
+ * 模型对"这是附件内容"的辨识度更好。
+ *
+ * 三类来源：纯文本直接读；docx/xlsx/pptx/pdf 抽文本（C 期）；都不行就给一句人话提示。
+ */
 export async function currentTurnTextBlocks(messages: UIMessage[]): Promise<string> {
   const lastUserIndex = messages.findLastIndex((message) => message.role === 'user');
   if (lastUserIndex < 0) return '';
@@ -61,10 +90,9 @@ export async function currentTurnTextBlocks(messages: UIMessage[]): Promise<stri
     let text: string | null = null;
 
     if (isTextFile({ filename: file.filename, mediaType: file.mediaType })) {
+      // 读全量（上限 = 文件体积上限），由 buildFileBody 决定"内联全文"还是"给预览"
       const read = await readUploadText(file.url, MAX_TEXT_CHARS_PER_FILE);
-      if (read) {
-        text = read.truncated ? `${read.text}\n…（内容过长，已截断）` : read.text;
-      }
+      if (read) text = read.text;
     } else if (isOfficeOrPdf({ filename: file.filename, mediaType: file.mediaType })) {
       const bytes = await readUploadBytes(file.url);
       if (bytes) text = await extractDocumentText(bytes, extOf(file.filename ?? ''));
@@ -76,7 +104,7 @@ export async function currentTurnTextBlocks(messages: UIMessage[]): Promise<stri
       );
       continue;
     }
-    blocks.push(`<file name="${name}">\n${text}\n</file>`);
+    blocks.push(`<file name="${name}">\n${buildFileBody(text)}\n</file>`);
   }
   return blocks.join('\n\n');
 }
@@ -106,11 +134,30 @@ async function toModelFilePart(part: { filename?: string; mediaType: string; url
  * @param messages UI 消息（含 file 附件片段）
  * @param withImages 是否把最后一条 user 消息的图片转成 image part（CLI 分支自己拼 prompt，用 false）
  */
+/**
+ * 不支持视觉时的占位符（学 LobeChat 的 `VISION_DOWNGRADE_PLACEHOLDER`）：
+ * **显式告诉模型"有图但你看不到"**，而不是静默丢掉附件——静默丢会让模型一脸茫然，
+ * 还能让用户以为图已经发出去了。
+ */
+function visionDowngradeNote(count: number, names: string[]): string {
+  const list = names.filter(Boolean).join('、');
+  return (
+    `[用户发送了 ${count} 张图片（${list}），但当前模型不支持视觉，看不到图片内容。` +
+    `请直接告知对方你无法查看图片，并请他用文字描述要点。]`
+  );
+}
+
+/**
+ * 转成 streamText 用的 messages。
+ * @param messages UI 消息（含 file 附件片段）
+ * @param options.supportsVision false 时图片换成显式占位符（不静默丢）；默认 true
+ */
 export async function toModelMessagesWithImages(
   messages: UIMessage[],
-  options: { withImages?: boolean } = {},
+  options: { supportsVision?: boolean; withImages?: boolean } = {},
 ): Promise<ModelMessage[]> {
   const withImages = options.withImages ?? true;
+  const supportsVision = options.supportsVision ?? true;
   const lastUserIndex = messages.findLastIndex((message) => message.role === 'user');
   const out: ModelMessage[] = [];
 
@@ -131,6 +178,14 @@ export async function toModelMessagesWithImages(
     // 文本类附件 → `<file name>` 文本块拼在最后一条 user 消息里（图片之前）
     const textBlocks = await currentTurnTextBlocks(messages);
     const base = converted.content;
+    // 不支持视觉：图片换成显式占位符文本，绝不静默丢
+    const downgradeNote =
+      files.length > 0 && !supportsVision
+        ? visionDowngradeNote(
+            files.length,
+            files.map((file) => file.filename ?? ''),
+          )
+        : '';
     const text = [
       ...(typeof base === 'string'
         ? base.trim()
@@ -138,11 +193,14 @@ export async function toModelMessagesWithImages(
           : []
         : (base ?? []).map((part) => ('text' in part ? part.text : '')).filter(Boolean)),
       textBlocks,
+      downgradeNote,
     ]
       .filter(Boolean)
       .join('\n\n');
 
-    const images = await Promise.all(files.map((file) => toModelFilePart(file)));
+    const images = supportsVision
+      ? await Promise.all(files.map((file) => toModelFilePart(file)))
+      : [];
     const content = [
       ...(text.trim() ? [{ text, type: 'text' as const }] : []),
       ...images,

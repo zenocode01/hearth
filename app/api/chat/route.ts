@@ -17,6 +17,7 @@ import { serializeParts } from '@/lib/db/messageParts';
 import { agents, messages as messagesTable, topics } from '@/lib/db/schema';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
 import { currentTurnImages, currentTurnTextBlocks, toModelMessagesWithImages } from '@/lib/llm/attachments';
+import { builtinSupportsVision } from '@/lib/llm/capabilities';
 import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
 import { createRun, endRun, waitForQuestion } from '@/lib/llm/cliRuns';
 import { buildPiToolFlags, isPiCommand } from '@/lib/llm/piTools';
@@ -338,7 +339,9 @@ export async function POST(req: Request) {
     instructions: agent?.systemPrompt ?? undefined,
     // 自己转：附件是 /uploads 相对路径，SDK 的 convertToModelMessages 走 new URL() 会抛；
     // 且只把**当前轮**的图片转成 image part（历史附件只留文字，见 lib/llm/attachments.ts）
-    messages: await toModelMessagesWithImages(uiMessages),
+    messages: await toModelMessagesWithImages(uiMessages, {
+      supportsVision: builtinSupportsVision(),
+    }),
     temperature: agent?.temperature ?? undefined,
     // 内置工具（L2-11）：按会话开关筛选；模型主动调用 → 服务端执行 → 结果回填后继续生成
     tools: Object.keys(chatToolsForTurn).length > 0 ? chatToolsForTurn : undefined,

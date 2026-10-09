@@ -109,7 +109,8 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
   **不支持**：旧版 `.doc/.xls/.ppt`（OLE 二进制，上传即拒并提示另存）、**扫描版 PDF**（没有文字层，抽出来是空）。
   取舍与坑见 `.agents/skills/attachments-multimodal`：
   - **只有当前轮的附件内容进模型**（历史里的附件只留引用）——看旧图/重读旧文件要用户重发；
-  - 文本文件进 prompt 每文件截断到 20k 字符；文本 256KB / 图片 5MB / 文档 PDF 10MB；单条消息 6 个附件；
+  - 超长文件（>5 万字）**只给 4000 字预览 + 明确声明"剩余读不到"**；纯文本模型（`LLM_VISION=0`）时图片换成显式占位符而不是静默丢；
+  - 文本文件进 prompt 每文件截断到 50k 字（超了走预览）；文本 1MB / 图片 5MB / 文档 PDF 10MB；单条消息 6 个附件；
   - `public/uploads/` **没有清理机制**（同内容 sha1 去重，但删除会话不会删文件）；
   - **非 RPC 的外部 CLI**（json 模式的 opencode 等）传不了图，图片附件会被静默忽略（文本仍然并进 prompt）。
 - **pi 工具开关**：`grep` 做过行为验证；`powershell/ls/find` 机制相同但未逐一实测。

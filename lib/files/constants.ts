@@ -62,11 +62,27 @@ export const MAX_OFFICE_FILE_BYTES = 10 * 1024 * 1024;
 /** 单个文件体积上限 5MB */
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
-/** 文本文件更小的上限（要读进 prompt，别把上下文撑爆） */
-export const MAX_TEXT_FILE_BYTES = 256 * 1024;
+/**
+ * 文本类附件的体积上限 1MB。比"能塞进 prompt 的字数"宽松得多——因为真正进模型的只有
+ * 前 50k 字（超了给预览，见 FILE_INLINE_MAX_CHARS）。上传限制卡太死会让用户频繁失败。
+ */
+export const MAX_TEXT_FILE_BYTES = 1024 * 1024;
 
-/** 单个文本文件塞进 prompt 的字符上限（超出截断并标注） */
-export const MAX_TEXT_CHARS_PER_FILE = 20_000;
+/**
+ * 读文本附件时的字符上限（≈文件体积上限 1MB，够读全量）。
+ * 注意这不是"进 prompt 的字数"——那个由 FILE_INLINE_MAX_CHARS / FILE_PREVIEW_CHARS 决定。
+ * 读全量是为了让"完整内容约 N 字"这句话**说的是真实字数**，模型据此知道自己漏了什么。
+ */
+export const MAX_TEXT_CHARS_PER_FILE = 1_000_000;
+
+/**
+ * 超过这个字符数就只给"预览"（学 LobeChat 的 `FILE_INLINE_MAX_CHARS`）：
+ * 一次坏附件能永久污染整个会话（每轮都重发时更甚），所以宁可少给也要说清"这是预览"。
+ */
+export const FILE_INLINE_MAX_CHARS = 50_000;
+
+/** 预览模式给模型看多少字（学 LobeChat 的 `FILE_PREVIEW_CHARS`） */
+export const FILE_PREVIEW_CHARS = 4_000;
 
 /** 一条消息最多几个附件 */
 export const MAX_FILES_PER_MESSAGE = 6;
