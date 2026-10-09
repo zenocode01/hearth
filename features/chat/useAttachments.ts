@@ -12,6 +12,8 @@ import {
   MAX_TEXT_FILE_BYTES,
 } from '@/lib/files/constants';
 
+import { prepareImageForUpload } from './imageCompress';
+
 /** 一个已上传的附件（URL 形态，和消息里的 file 片段一致） */
 export interface Attachment {
   filename: string;
@@ -81,19 +83,31 @@ export function useAttachments() {
           continue;
         }
         const limit = asText ? MAX_TEXT_FILE_BYTES : asDocument ? MAX_OFFICE_FILE_BYTES : MAX_FILE_BYTES;
-        if (file.size > limit) {
-          setError(`${file.name} 太大（上限 ${Math.round(limit / 1024 / 1024)}MB）`);
+
+        // 图片先压缩再校验体积：手机大图压缩后往往只剩几百 KB，
+        // 直接按原文件体积拒掉会让用户觉得"传不上去"（LobeChat 同样的思路）
+        let dataBase64: string;
+        let filename = file.name;
+        let mediaType = file.type;
+        let size = file.size;
+        if (isImage) {
+          const prepared = await prepareImageForUpload(file);
+          dataBase64 = prepared.dataBase64;
+          filename = prepared.filename;
+          mediaType = prepared.mediaType;
+          size = prepared.size;
+        } else {
+          dataBase64 = await readAsDataUrl(file);
+        }
+
+        if (size > limit) {
+          setError(`${filename} 太大（上限 ${Math.round(limit / 1024 / 1024)}MB）`);
           continue;
         }
 
         try {
-          const dataBase64 = await readAsDataUrl(file);
           const res = await fetch('/api/files', {
-            body: JSON.stringify({
-              dataBase64,
-              filename: file.name,
-              mediaType: file.type,
-            }),
+            body: JSON.stringify({ dataBase64, filename, mediaType }),
             headers: { 'content-type': 'application/json' },
             method: 'POST',
           });
