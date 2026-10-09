@@ -2,7 +2,7 @@
 
 import { Button, Icon, Input, Popover, Text } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
-import { Download, FileJson, FileText, MessageSquarePlus, SquarePen, Trash2 } from 'lucide-react';
+import { Download, FileJson, FileText, MessageCircleQuestion, MessageSquarePlus, SquarePen, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
 
 import { Delayed } from '@/components/Delayed';
@@ -18,9 +18,11 @@ interface TopicRowProps {
   onRename: (id: string, title: string) => void;
   onSelect: (id: string) => void;
   topic: Topic;
+  /** 这个会话有等待回答的提问（跨会话提示的侧边栏徽章） */
+  waiting?: boolean;
 }
 
-const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete }: TopicRowProps) => {
+const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }: TopicRowProps) => {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -97,6 +99,15 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete }: TopicRow
         </div>
       ) : (
         <>
+          {waiting && (
+            <span title="有等待回答的提问" style={{ display: 'flex', flexShrink: 0 }}>
+              <Icon
+                icon={MessageCircleQuestion}
+                size={13}
+                style={{ color: 'var(--ant-color-primary, #1677ff)' }}
+              />
+            </span>
+          )}
           <Text ellipsis style={{ flex: 1, fontSize: 13 }} title={topic.title}>
             {topic.title}
           </Text>
@@ -188,6 +199,8 @@ interface TopicSidebarProps {
   onRename: (id: string, title: string) => void;
   onRetryTopics: () => void;
   onSelect: (id: string) => void;
+  /** 有等待回答提问的会话 id 集合（侧边栏徽章） */
+  pendingTopicIds?: Set<string>;
   topics: Topic[];
   topicsError: boolean;
   topicsLoading: boolean;
@@ -211,6 +224,7 @@ export const TopicSidebar = memo(
     onRetryTopics,
     topicsError,
     topicsLoading,
+    pendingTopicIds,
     width = 240,
   }: TopicSidebarProps) => (
     <div
@@ -260,6 +274,7 @@ export const TopicSidebar = memo(
               active={topic.id === activeId}
               key={topic.id}
               topic={topic}
+              waiting={pendingTopicIds?.has(topic.id)}
               onDelete={onDelete}
               onRename={onRename}
               onSelect={onSelect}

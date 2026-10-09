@@ -77,18 +77,21 @@ pi 的事件流里有完整的工具协议（**实测**，`pi -p --mode json` �
 ### question（向用户提问）
 
 - **前提：必须用 RPC 模式**。`-p --mode json` 没有 UI（`ctx.hasUI=false`），question 扩展会直接返回错误；`--mode rpc` 下 `hasUI=true`，走 `ctx.ui.select / input` 的**对话协议**。
+- **⚠️ 用户级扩展必须放行 rpc**（仓外文件 `~/.pi/agent/extensions/question.ts`，2026-10-08 踩过）：原版判 `ctx.mode !== "tui"` 直接回 "UI not available (running in non-interactive mode)"，RPC 下永远发不出 `extension_ui_request`。已改成：**tui → `ctx.ui.custom` 自绘；rpc → `ctx.ui.select`**（宿主若直接提交了不在选项里的文本，当自由输入收下）；`json/print` 仍报错。改这个文件后新 spawn 的 pi 即生效（无缓存）。
 - **协议**（`lib/llm/piRpc.ts`）：
   - 提示词走 stdin：`{"type":"prompt","message":"…"}`（所以模板**不要有 `{{prompt}}`**，运行器会明确报错）；
   - 会话事件与 json 模式相同 → 复用 `parsePiEvent`；
   - `extension_ui_request`：`select/input/confirm/editor` 是**阻塞对话**（要回 `extension_ui_response`），`notify/setWidget/…` 直接忽略；
   - `agent_settled` = 这一轮结束。
 - **坑（踩过）**：对话请求**不能立即异步处理**——那时 `toolcall_end` 还在队列里没被上层消费，`pendingQuestion` 是 null，awaiting 标记无处可挂，扩展收到 `cancelled`（表现为"User cancelled the selection"）。正确做法：把对话请求也**入队**，在生成器里按顺序 `await handleDialog(...)`。
-- **等待回答的桥**（参考 refs 的 AskUserBridge）：`lib/llm/cliRuns.ts` 注册表（globalThis 保活）→ 路由的 `askUser` 把 `{ awaiting: true, requestId, runId }` 写进 pending 的 `question` 工具片段 → `POST /api/cli-runs/[id]/answer` → `resolveQuestion` → 运行器写回 pi → **原进程继续**（不新开一轮对话）→ 随后正常吐 toolResult。
-- **UI（学 LobeHub 的 InterventionBar，单一渲染位）**：
-  - `features/chat/interventions.ts` 的 `findPendingQuestion(messages)` 从消息里**派生**出等待回答的提问（不另存状态）；
-  - `features/chat/QuestionBar.tsx`：挂在**输入框上方**，有 pending 时出现（选项按钮 + 描述 + 自由输入 + 取消，复用 `QuestionForm`）；
-  - **pending 时内联工具行不渲染**（`MessageItem` 直接 `return null`），输入框**禁用**（占位符"请先回答上面的问题…"，防止并发发消息）；
-  - 回答后：pending 消失 → 栏自动卸载 → 内联位置恢复渲染工具结果（`output-available` + 答案）——同一份数据两处渲染，但**同一时刻只有一处**。
+- **等待回答的桥**（参考 refs 的 AskUserBridge）：`lib/llm/cliRuns.ts` 注册表（globalThis 保活；**v2 每条记 `topicId + input + method`**，`listPendingQuestions()` 可列出跨会话全部等待中的提问）→ 路由的 `askUser` 把 `{ awaiting: true, requestId, runId }` 写进 pending 的 `question` 工具片段 → `POST /api/cli-runs/[id]/answer` → `resolveQuestion` → 运行器写回 pi → **原进程继续**（不新开一轮对话）→ 随后正常吐 toolResult。`GET /api/cli-runs` 是轮询用的跨会话查询口。
+- **UI（对齐 LobeHub InterventionBar）**：
+  - `features/chat/interventions.ts`：`findPendingQuestions(messages)`（**数组**）+ `questionText` + `mergePendingQuestions(消息标记, 注册表条目)`（按 `requestId` 去重；消息标记只活在流内存里，**切会话/刷新后靠注册表重建**）；
+  - `features/chat/usePendingRuns.ts`：每 3s + `visibilitychange` 轮询 `GET /api/cli-runs`；
+  - `QuestionBar.tsx`：挂在**输入框上方**，`>1` pending 时渲染 tab（防备——单会话内 pi 顺序提问，最多 1 个）；
+  - `PendingIsland.tsx`：**其它会话**有 pending 时的底部提示条（chip + Popover 列表，行显示"会话标题 + 问题预览"，点行跳过去回答）；"全部同意"按钮只在所有 pending 都是 `method === 'confirm'` 时出现（question 工具走 `select`，不适用）；`TopicSidebar` 的 ❓ 徽章来自 `pendingTopicIds`；
+  - pending 时内联工具行不渲染（`MessageItem` return null）、当前会话输入框禁用（占位符"请先回答上面的问题…"）；回答后 pending 消失 → 栏卸载 → 内联恢复渲染工具结果（`output-available` + 答案）。
+- **⚠️ 切会话不能无脑 `stop()`**（`features/chat/index.tsx` 的 `keepStream`）：有等待回答的提问时（消息标记或注册表任一命中）跳过 `stop()`——abort 会让服务端 `req.signal` **kill 掉 pi**，答案无处可送（跨会话 island 全靠这条活）。同时挂起流不算 `busy`（`streamBlocked`：按 `streamTopicIdRef` 匹配注册表），否则切到别的会话会显示"停止/思考中"、发不出消息；而**新会话 sendMessage 不会掐断旧流**（AI SDK 各自的 fetch 并存，实测两个 pi 进程同跑）。
 - **预设**：`pi --mode rpc --system-prompt "{{systemPrompt}}"`（question 能力的前提）。
 
 ## pi 工具的开关（`--tools` / `--exclude-tools` 注入）

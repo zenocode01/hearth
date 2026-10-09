@@ -21,7 +21,7 @@
 ## 2. 现在在哪（进度）
 
 - **阶段 0~4 全部完成**：骨架 + 主题动画 · 流式聊天 · SQLite 持久化 · Agent 管理 · 打磨（三态/启动占位/响应式）
-- **阶段 5 进行中**：✅ **L2-11 工具调用**（内置工具 + 工具卡片 + 开关）；✅ **L2-15 导出/备份**（侧栏导出 .md/.json）；⏭️ 用户明确**跳过 L2-10 图片生成**
+- **阶段 5 进行中**：✅ **L2-11 工具调用**（内置工具 + 工具卡片 + 开关）；✅ **L2-15 导出/备份**（侧栏导出 .md/.json）；⏭️ 用户明确**跳过 L2-10 图片生成**；✅ **提问栏对齐**（跨会话 island + 徽章 + 注册表兜底 + "全部同意"位，待 commit）
 - **额外（超出原路线图）**：**外部 CLI Agent** 深度集成（pi / opencode / claude），尤其是 **pi**：
   思考流、工具卡片、todo 清单、question 提问、工具开关
 
@@ -38,6 +38,7 @@
 | question UI | `36f0d1e` `bedbdf9` | **RPC 模式**运行器 + 对话协议 + 等待回答的注册表/接口 + **输入框上方的提问栏**（pending 时内联不渲染、输入框禁用） |
 | 改名 & 打磨 | `5dfec42` `be49ef3` `0a9e978` `e5e8dd1` | pi-web → **Hearth**（含内部前缀迁移）；移动端响应式；三态 + 启动占位 + 路由级 loading/预取 |
 | 导出/备份 L2-15 | `173e78c` | 侧栏会话行导出按钮（Popover 选 .md/.json，fetch→blob 下载 + toast）；`GET /api/topics/[id]/export` 附件下载（中文文件名 `filename*`）；`lib/export/topicExport` 纯逻辑（md 含推理 details、json 无损） |
+| 提问栏对齐 | *（待 commit）* | 注册表 v2（`topicId/input/method` + `listPendingQuestions`）+ `GET /api/cli-runs` 轮询（`usePendingRuns` 3s）→ **跨会话 island**（`PendingIsland`：chip+Popover+条件"全部同意"）+ 侧栏 ❓ 徽章；`QuestionBar` 收数组（>1 渲染 tab）、`mergePendingQuestions` 注册表兜底（切走/刷新后重建）；**切会话 `keepStream` 不 stop 挂起流** + `streamBlocked` 不算 busy；仓外修复 `~/.pi/agent/extensions/question.ts` 放行 rpc（`ctx.ui.select`） |
 
 ## 4. 关键文件地图（本轮重点）
 
@@ -55,7 +56,8 @@
 | `app/api/topics/[id]/export/route.ts` | 会话导出（?format=md\|json，附件下载） |
 | `lib/export/topicExport.ts` | 导出纯逻辑：Markdown 渲染 / JSON 备份 / 文件名清洗 |
 | `app/api/cli-runs/[id]/answer/route.ts` | 提交"提问"的答案 |
-| `features/chat/` | `index.tsx`（主视图）、`ToolCard`、`ToolPicker`、`TodoPanel`、`QuestionBar`、`QuestionForm`、`interventions.ts` |
+| `app/api/cli-runs/route.ts` | GET 跨会话 pending 列表（island/徽章的轮询口） |
+| `features/chat/` | `index.tsx`（主视图）、`ToolCard`、`ToolPicker`、`TodoPanel`、`QuestionBar`、`QuestionForm`、`PendingIsland`、`usePendingRuns`、`interventions.ts` |
 | `features/agent/` | Agent 列表/编辑页、`AgentAvatar`、`agentIcons`（品牌头像）、骨架 |
 | `components/` | 主题壳、启动占位、`AsyncBoundary`、骨架、`useMediaQuery` |
 | `.agents/skills/` | 领域细则（**改动相关领域前先读**：`builtin-tools`、`chat-streaming`、`agent-management`、`ui-theming`、`topics-persistence`…） |
@@ -70,6 +72,8 @@
   - 工具开关：会话里的 `auto`→`--tools +名字`、`disabled`→`--exclude-tools 名字`，追加到命令末尾即可。
   - **`--system-prompt` 会替换 pi 默认系统提示（含 `<tools>` 段）**——所以工具清单要**往回扫最近若干会话**找那个有 `<tools>` 段的。
   - pi 事件：`message_update`（thinking/text/toolcall delta）、`message_end`（`role=toolResult` 带 `details`）、`extension_ui_request`（对话要按序入队处理！）、`agent_settled`。
+  - **question 扩展在 RPC 下要用 `ctx.ui.select`**（2026-10-08）：`~/.pi/agent/extensions/question.ts`（**仓外**）原版判 `ctx.mode !== "tui"` 直接报错，RPC 下提问必失败；已改 tui→`ctx.ui.custom`、rpc→`ctx.ui.select`。验法：写个临时 RPC 探针（用完删）看 `extension_ui_request method:"select"` 是否发出。
+  - **有等待回答的提问时切会话不能 `stop()`**（2026-10-08）：abort → 服务端 `req.signal` → kill pi，答案无处可送（表现：`/answer` 返 200 但进程早死了）。`features/chat/index.tsx` 的 `keepStream`/`streamBlocked` 就是干这个的，动切会话逻辑前先读它。
   - **pi"没有输出"先查 pi 自己的模型认证**（2026-10-08 踩过）：pi 的 provider 配在 `~/.pi/agent/models.json`（默认 provider 见 `settings.json`），服务端换 key 后 pi 会收到 `401`，`message_end` 里 `content` 为空、`stopReason:"error"`。诊断：`scripts/` 临时写个 RPC 探针打原始事件（看 `errorMessage`）；修：改 `models.json` 的 `apiKey`。**错误现已透出到界面**（`humanizePiError`，见 §7）；pi 版本用 `pi update self` 升级（当前 1.1.0，0.87→1.1 RPC 协议兼容）。
 - **`refs/` 是只读参考书**：不入库、不许 import；学思路自己写（见 `license-and-references`）。
 - **临时脚本**：放 `scripts/` 的调试脚本用完删掉（仓库里只留 `mock-llm.mjs`）。
@@ -90,7 +94,10 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
 
 - **L2-10 图片生成**：用户明确跳过（`image-generation` skill 还在，别当成待办）。
 - **MCP（L2-12）**：未做。`ToolCard` 已能渲染 `dynamic-tool`，接入时可直接复用。
-- **提问栏只支持单个 pending**：LobeHub 有 tab 切换 + 批量批准 + 跨会话 island（`InterventionBar`），我们只做了"单一渲染位"。
+- **提问栏对齐已做大半**（2026-10-08，待 commit）：多 pending tab（防备位）+ 跨会话 island/徽章 + 注册表兜底重建 + "全部同意"按钮位。**剩余**：
+  - "全部同意"只在全部 `method === 'confirm'` 时出现，而 question 工具走 `select` → **该路径没实测过**（需要一个会发 confirm 对话的场景）；
+  - **僵尸标记**：run 中途被杀（旧 bug/直接杀进程）后，DB 里留在 `input-available` 的提问片段刷新后仍渲染提问栏，提交回 404（"回答提交失败"）——旧测试会话删掉即可，要不要做"按注册表过滤标记"待定；
+  - **刷新页面会杀挂起的 pi**（fetch 断 → `req.signal` → kill），注册表条目留到有人回答才自清；设计上要"断流重连"才能根治（大改，先记着）。
 - **pi 工具开关**：`grep` 做过行为验证；`powershell/ls/find` 机制相同但未逐一实测。
 - **pi 出错时界面静默**：已修（2026-10-08）——`parsePiEvent` 现在把 assistant `message_end` 的 `errorMessage` 透出成可读正文（`humanizePiError`：401/403/404/429 各有指引），坏 key 实测显示"⚠️ pi 调用模型失败：…检查 ~/.pi/agent/models.json"。
 - **i18n（L2-8）**：未做。
@@ -100,6 +107,6 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
 
 1. **MCP 接入（L2-12）**：把 MCP server 的工具转成 `dynamicTool`，UI 复用 ToolCard；参考 `refs/lobe-chat/packages/heterogeneous-agents/src/mcp`。
 2. **个人记忆（L2-13）**：`user_memory` 表 + "我的记忆"页 + 对话前拼进提示词。
-3. **对齐 LobeHub 的提问栏**：多 pending tab + 批量批准 + 跨会话提示。
+3. **提问栏收尾**：实测"全部同意"（confirm 路径）；可选：僵尸标记按注册表过滤、挂起流断流重连（见 §7）。
 
 > 工作节奏见 `vibe-coding-discipline` skill：**小步**（一次一个小功能）、随时能跑、验收后立刻 commit、约定变了先改 AGENTS.md/skill。

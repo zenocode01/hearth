@@ -7,7 +7,7 @@ import { ThinkIcon } from '@lobehub/ui/icons';
 import type { UIMessage } from 'ai';
 import { PanelLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ThemeControls } from '@/components/ThemeControls';
 import { useIsMobile } from '@/components/useMediaQuery';
@@ -18,14 +18,16 @@ import { parseToolSettings, type ToolSetting } from '@/lib/tools/settings';
 import { BackBottom } from './BackBottom';
 import { ChatComposer } from './ChatComposer';
 import { EmptyState } from './EmptyState';
-import { findPendingQuestion } from './interventions';
+import { findPendingQuestions, mergePendingQuestions } from './interventions';
 import { MessageItem } from './MessageItem';
 import type { MessageActionKey } from './MessageActions';
 import { MessageSkeleton } from './MessageSkeleton';
+import { PendingIsland } from './PendingIsland';
 import { QuestionBar } from './QuestionBar';
 import { TodoPanel } from './TodoPanel';
 import { ToolPicker } from './ToolPicker';
 import { TopicSidebar } from './TopicSidebar';
+import { usePendingRuns } from './usePendingRuns';
 
 /** 距底多少像素内算"在底部" */
 const BOTTOM_THRESHOLD = 32;
@@ -56,6 +58,8 @@ export function ChatView() {
   const requestStartedAtRef = useRef<number | null>(null);
   // 刚由本页创建的会话：跳过一次历史加载（否则会把刚发出的消息清空）
   const skipHistoryForRef = useRef<string | null>(null);
+  /** 当前聊天流是为哪个会话开的（挂起在提问上时，用来判断这条流属不属于它） */
+  const streamTopicIdRef = useRef<string | null>(null);
 
   /**
    * 拉会话列表。**默认静默**：发送消息 / 改名 / 删除之后的刷新不闪骨架屏；
@@ -98,11 +102,38 @@ export function ChatView() {
     onFinish: () => void refreshTopics(),
   });
 
-  const busy = status === 'submitted' || status === 'streaming';
+  // 跨会话提示：每 3s 轮询服务端注册表（哪些会话在等待回答）
+  const pendingRuns = usePendingRuns();
+  const pendingTopicIds = useMemo(
+    () => new Set(pendingRuns.map((item) => item.topicId).filter(Boolean) as string[]),
+    [pendingRuns],
+  );
+  /** 其它会话的 pending（当前会话的走 QuestionBar） */
+  const otherTopicPendings = useMemo(
+    () => pendingRuns.filter((item) => item.topicId && item.topicId !== activeTopicId),
+    [pendingRuns, activeTopicId],
+  );
+  /** 当前会话的 pending：消息里的标记（实时）+ 注册表（切走再切回/刷新后消息标记会丢） */
+  const pendingQuestions = useMemo(
+    () =>
+      mergePendingQuestions(
+        findPendingQuestions(messages),
+        pendingRuns.filter((item) => item.topicId === activeTopicId),
+      ),
+    [messages, pendingRuns, activeTopicId],
+  );
+
+  // 挂起流：当前聊天流的会话有等待回答的提问时（pi 阻塞在提问、不产生数据），
+  // 这条流是"空闲挂起"的——不算忙碌，否则切到其它会话也会显示"停止/思考中"、发不出消息
+  const streamBlocked =
+    status === 'streaming' &&
+    streamTopicIdRef.current != null &&
+    pendingRuns.some((item) => item.topicId === streamTopicIdRef.current);
+  const busy = status === 'submitted' || (status === 'streaming' && !streamBlocked);
 
   const lastMessage = messages[messages.length - 1];
   // 有待回答的提问时禁用输入框（避免并发发消息）
-  const hasPendingQuestion = Boolean(findPendingQuestion(messages));
+  const hasPendingQuestion = pendingQuestions.length > 0;
   const waitingFirstToken =
     busy &&
     !(
@@ -274,6 +305,7 @@ export function ChatView() {
     atBottomRef.current = true;
     setAtBottom(true);
     requestStartedAtRef.current = Date.now();
+    streamTopicIdRef.current = topicId;
     void sendMessage(
       { text },
       {
@@ -374,23 +406,28 @@ export function ChatView() {
     setHistoryAttempt((count) => count + 1);
   }, []);
 
+  // 切会话时是否保留当前聊天流：有等待回答的提问（消息标记或注册表任一命中）时必须保留——
+  // 此时流是空闲挂起的（pi 阻塞在等回答，不产生数据，不会污染目标会话的视图），
+  // 而 stop() 会 abort 请求 → 服务端 signal 把 pi 进程杀掉，回答就无处可送了（跨会话 island 靠这条活）。
+  const keepStream = hasPendingQuestion || pendingRuns.length > 0;
+
   const handleCreate = useCallback(() => {
-    stop();
+    if (!keepStream) stop();
     clearError();
     setSidebarOpen(false);
     setActiveTopicId(null);
     setMessages([]);
-  }, [clearError, setMessages, stop]);
+  }, [clearError, keepStream, setMessages, stop]);
 
   const handleSelect = useCallback(
     (id: string) => {
       if (id === activeTopicId) return;
-      stop();
+      if (!keepStream) stop();
       clearError();
       setSidebarOpen(false);
       setActiveTopicId(id);
     },
-    [activeTopicId, clearError, stop],
+    [activeTopicId, clearError, keepStream, stop],
   );
 
   const handleDelete = useCallback(
@@ -445,6 +482,7 @@ export function ChatView() {
               onRename={(id, title) => void handleRename(id, title)}
               onRetryTopics={() => void refreshTopics({ silent: false })}
               onSelect={handleSelect}
+              pendingTopicIds={pendingTopicIds}
               topicsError={topicsStatus === 'error'}
               topicsLoading={topicsStatus === 'loading'}
             />
@@ -463,6 +501,7 @@ export function ChatView() {
           onRename={(id, title) => void handleRename(id, title)}
           onRetryTopics={() => void refreshTopics({ silent: false })}
           onSelect={handleSelect}
+          pendingTopicIds={pendingTopicIds}
           topicsError={topicsStatus === 'error'}
           topicsLoading={topicsStatus === 'loading'}
         />
@@ -589,8 +628,11 @@ export function ChatView() {
         {/* 任务清单面板（pi 的 todo 扩展；没有清单时自动隐藏） */}
         <TodoPanel messages={messages} />
 
+        {/* 跨会话提示条（其它会话有等待回答的提问时出现，点行跳过去回答） */}
+        <PendingIsland onSelect={handleSelect} pendings={otherTopicPendings} topics={topics} />
+
         {/* 提问栏（等待回答时出现；回答在这里完成，消息里只留结果） */}
-        <QuestionBar messages={messages} />
+        <QuestionBar pendings={pendingQuestions} />
 
         <ChatComposer
           busy={busy}

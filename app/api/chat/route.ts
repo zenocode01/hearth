@@ -184,7 +184,7 @@ export async function POST(req: Request) {
         // pi 的 RPC 模式（`--mode rpc`）：支持扩展的交互（question 等）
         const useRpc = isPiCommand(effectiveCommand) && /--mode[=\s]+rpc\b/.test(effectiveCommand);
         const runId = createId('run');
-        if (useRpc) createRun(runId);
+        if (useRpc) createRun(runId, { topicId });
 
         /** 最近一次 question 工具调用（pi 的 question 扩展在它的 execute 里发起对话） */
         let pendingQuestion: { input?: unknown; toolCallId: string } | null = null;
@@ -264,7 +264,10 @@ export async function POST(req: Request) {
                     type: 'tool-input-available',
                   });
 
-                  return waitForQuestion(runId, request.id);
+                  return waitForQuestion(runId, request.id, {
+                    input: pendingQuestion.input,
+                    method: request.method,
+                  });
                 },
                 command: effectiveCommand,
                 prompt: promptText,
