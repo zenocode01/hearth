@@ -104,6 +104,7 @@ pi 的事件流里有完整的工具协议（**实测**，`pi -p --mode json` �
 - **坑：`--system-prompt` 会替换整段默认系统提示（含 `<tools>` 段）**。所以：
   - 不能靠"最新会话文件"拿"已启用工具"——要**往回扫最近若干次会话**找那个有 `<tools>` 段的（`sessionFiles().slice(0, 20)`）；
   - `<tools>` 段只是**提示**，真正的工具声明走模型 API，所以有 `--system-prompt` 时行为照旧（实测 grep/ls 开关都能被模型调用）。
+- **⚠️ 开关归一化只能丢"本来就开着"的 auto**（2026-10-08 踩过）：`ToolPicker.toggle` 会把"全是 auto"归一成 `[]`（=无覆盖，走各自默认）。pi 默认只开 read/bash/edit/write，**powershell/grep/find/ls 默认关**——它们的 `auto` 一旦被丢掉就等于没覆盖，开关会**弹回关**（看起来像"点不动"）。归一时要按 `tool.enabled`（实时自 pi 的 settings）过滤：`!(mode==='auto' && isDefaultOn(name))`。
 
 ## 关键决定与坑（都踩过）
 

@@ -33,6 +33,7 @@
 | pi 思考流 | `d5d9e63` | 解析 pi 的 JSONL：`thinking_delta`→推理块、`text_delta`→正文；**不做事件白名单** |
 | 内置工具调用 | `3b4802c` | `lib/llm/tools.ts`（计算器/当前时间/抓网页）+ `stopWhen` 多步 + 工具卡片 + 片段落库 `messages.parts` |
 | 工具列表与开关 | `078c364` `631e72d` `321f92d` `27b783b` | 输入框 ActionBar 入口 + Popover；pi 运行时显示**pi 的工具**（内置 8 + 扩展，实时读 settings/会话）；开关随会话保存并注入 `--tools +x` / `--exclude-tools y` |
+| 工具开关修复 | *（见 git log）* | pi 默认关的工具（powershell/grep/find/ls）开关点不动：归一成"无覆盖"后 pi 的默认"关"又赢回来 → 归一时只丢"本来就开着"的 auto |
 | pi 工具卡片 | `515d474` | `toolcall_end` / `role=toolResult` → UI 工具片段；刷新后卡片保留 |
 | todo UI | `a1246fe` | 工具卡片渲染 ✓/○ 清单 + 输入框上方**任务清单面板**（清单在工具结果 `details` 里，随消息持久化） |
 | question UI | `36f0d1e` `bedbdf9` | **RPC 模式**运行器 + 对话协议 + 等待回答的注册表/接口 + **输入框上方的提问栏**（pending 时内联不渲染、输入框禁用） |

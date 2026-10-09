@@ -122,6 +122,12 @@ export const ToolPicker = memo(({ agentId, settings, onChange }: ToolPickerProps
   };
   const enabledCount = payload.tools.filter(isEnabled).length;
 
+  /** pi 侧本来就开着的工具（read/bash/edit/write + 扩展）——它们的 'auto' 覆盖可以省掉 */
+  const isDefaultOn = (name: string) => {
+    if (isBuiltin) return true;
+    return Boolean(payload.tools.find((tool) => tool.name === name)?.enabled);
+  };
+
   const toggle = (name: string, next: boolean) => {
     const modes = new Map((settings ?? []).map((item) => [item.name, item.mode]));
     modes.set(name, next ? 'auto' : 'disabled');
@@ -129,8 +135,11 @@ export const ToolPicker = memo(({ agentId, settings, onChange }: ToolPickerProps
       mode,
       name: toolName,
     }));
-    // 全部是 auto 时归一成空数组（存库时会写成 null = 全部自动启用）
-    onChange(list.every((item) => item.mode === 'auto') ? [] : list);
+    // 归一成空数组（存库时写成 null = 全部按各自默认）：只丢"本来就是开"的 auto 条目。
+    // **不能**无脑全丢：pi 默认关的工具（powershell/grep/find/ls）一旦丢掉 'auto'，
+    // 就等于没覆盖 → pi 的默认"关"又赢回来，开关会弹回关（2026-10-08 修）。
+    const effective = list.filter((item) => !(item.mode === 'auto' && isDefaultOn(item.name)));
+    onChange(effective.length === 0 ? [] : effective);
   };
 
   const row = (tool: ToolItem) => {
