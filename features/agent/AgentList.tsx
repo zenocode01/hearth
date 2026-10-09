@@ -123,10 +123,13 @@ export function AgentList() {
                   )}
                 </Flexbox>
                 <Text ellipsis style={{ fontSize: 12 }} type="secondary">
-                  {agent.runtime === 'cli'
+                  {(agent.runtime === 'cli'
                     ? `外部 CLI · ${agent.cliCommand || '未配置命令'}`
                     : (agent.model || '默认模型') +
-                      (agent.temperature == null ? '' : ` · 温度 ${agent.temperature}`)}
+                      (agent.temperature == null ? '' : ` · 温度 ${agent.temperature}`)) +
+                    // 只在显式关掉思考时才标出来：off 最反直觉（用户以为在用推理模型），
+                    // 其余档位属于常规调参，不必占地方
+                    (agent.reasoningEffort === 'off' ? ' · 无思考' : '')}
                 </Text>
                 <Text ellipsis style={{ fontSize: 12 }} type="secondary">
                   {agent.systemPrompt || '（未设置人设）'}

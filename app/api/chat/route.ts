@@ -288,6 +288,7 @@ export async function POST(req: Request) {
                 },
                 command: effectiveCommand,
                 prompt: finalPrompt,
+                reasoningEffort: agent.reasoningEffort,
                 systemPrompt: agent.systemPrompt,
               })
             : runCliAgent({
@@ -343,6 +344,11 @@ export async function POST(req: Request) {
       supportsVision: builtinSupportsVision(),
     }),
     temperature: agent?.temperature ?? undefined,
+    // 思考等级：openai-compatible 的 chat options 认 reasoningEffort（最终发给模型 reasoning_effort）。
+    // 空 = 不干预，用模型自己的默认；非法值在 normalizeReasoningEffort 就被丢掉了。
+    ...(agent?.reasoningEffort
+      ? { providerOptions: { 'hearth-llm': { reasoningEffort: agent.reasoningEffort } } }
+      : {}),
     // 内置工具（L2-11）：按会话开关筛选；模型主动调用 → 服务端执行 → 结果回填后继续生成
     tools: Object.keys(chatToolsForTurn).length > 0 ? chatToolsForTurn : undefined,
     // 最多 5 步（多轮工具调用），避免模型陷入死循环

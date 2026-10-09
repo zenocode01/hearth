@@ -1,10 +1,13 @@
 /** Agent 表单输入的归一化（路由文件不能导出额外函数，故独立成模块）。 */
+import { normalizeReasoningEffort } from '@/lib/llm/reasoning';
+
 export interface AgentInput {
   avatar?: string;
   backgroundColor?: string;
   cliCommand?: string;
   model?: string;
   name?: string;
+  reasoningEffort?: string | null;
   runtime?: 'api' | 'cli';
   systemPrompt?: string;
   temperature?: number | null;
@@ -17,6 +20,8 @@ export function normalizeAgentInput(input: AgentInput) {
     cliCommand: input.cliCommand?.trim() || null,
     model: input.model?.trim() || null,
     name: (input.name ?? '').trim().slice(0, 40) || '未命名 Agent',
+    // 非法档位/空 → null（= 不干预，用运行方默认）
+    reasoningEffort: normalizeReasoningEffort(input.reasoningEffort),
     runtime: input.runtime === 'cli' ? ('cli' as const) : ('api' as const),
     systemPrompt: input.systemPrompt?.trim() || null,
     temperature:
@@ -37,6 +42,7 @@ export function normalizeAgentPatch(input: AgentInput) {
     cliCommand?: string | null;
     model?: string | null;
     name?: string;
+    reasoningEffort?: string | null;
     runtime?: 'api' | 'cli';
     systemPrompt?: string | null;
     temperature?: number | null;
@@ -49,6 +55,9 @@ export function normalizeAgentPatch(input: AgentInput) {
   if (input.cliCommand !== undefined) patch.cliCommand = input.cliCommand?.trim() || null;
   if (input.model !== undefined) patch.model = input.model?.trim() || null;
   if (input.name !== undefined) patch.name = (input.name ?? '').trim().slice(0, 40) || '未命名 Agent';
+  if (input.reasoningEffort !== undefined) {
+    patch.reasoningEffort = normalizeReasoningEffort(input.reasoningEffort);
+  }
   if (input.runtime !== undefined) patch.runtime = input.runtime === 'cli' ? 'cli' : 'api';
   if (input.systemPrompt !== undefined) patch.systemPrompt = input.systemPrompt?.trim() || null;
   if (input.temperature !== undefined) {

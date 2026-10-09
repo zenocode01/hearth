@@ -67,12 +67,12 @@ for (const name of ['models.json', 'auth.json']) {
   log(`✓ ${name} ← 全局配置`);
 }
 
-// 2) settings.json：**不沿用**全局的 thinking level（实测 high 让每轮多花 3~25 秒）
+// 2) settings.json：不沿用全局的 thinking level（全局那个是 high，会被当成 xhigh 跑）
 const destSettings = path.join(agentDir, 'settings.json');
 let generated = {
   defaultProvider: 'local-llm-6001',
   defaultModel: 'qwen3.8-flash-next-iq3_s',
-  // off / low / medium / high
+  // off / low / medium / high / xhigh
   defaultThinkingLevel: 'medium',
 };
 
@@ -96,8 +96,10 @@ if (existsSync(destSettings) && !force) {
   writeFileSync(destSettings, `${JSON.stringify(generated, null, 2)}\n`, 'utf8');
   log(`✓ settings.json ← 默认 ${generated.defaultProvider}/${generated.defaultModel}`);
   log('  （故意不带 packages/extensions：那正是慢的根源）');
-  log('  thinking level 固定 medium：实测 high 让同一请求从 12s 涨到 36s。');
-  log('  想改直接编辑 .pi-runtime/agent/settings.json 的 defaultThinkingLevel（off/low/medium/high）。');
+  log('  thinking level 取 middle 档 medium：稳妥的中间档。');
+  log('  注意哪些档位真生效由模型决定——pi 的 get_state 里能看到该模型的 thinkingLevelMap，');
+  log('  例如 6001 的 flash 模型 "off" 映射为 null（关不掉思考），"high" 会被当成 xhigh。');
+  log('  想改直接编辑 .pi-runtime/agent/settings.json 的 defaultThinkingLevel（off/low/medium/high/xhigh）。');
 }
 
 // 3) 项目扩展：源码在 .pi/extensions/（进 git），复制到 agentDir/extensions/（用户级，不需要 trust）

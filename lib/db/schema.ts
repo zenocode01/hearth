@@ -18,6 +18,16 @@ export const agents = sqliteTable('agents', {
   model: text('model'),
   /** 温度；空 = 用接口默认（仅 api 方式） */
   temperature: real('temperature'),
+  /**
+   * 思考等级：off / low / medium / high / xhigh；空 = 让运行方用默认值。
+   *
+   * 两条链路都支持，但含义不同：
+   * - api：进 providerOptions.reasoningEffort（openai-compatible 认这个字段）
+   * - cli（pi）：spawn 后发一条 `{"type":"set_thinking_level","level":…}` RPC 命令
+   *
+   * 差别大到值得单独一列：实测同一请求 high 比 medium 慢 3 倍（36s vs 12s）。
+   */
+  reasoningEffort: text('reasoning_effort'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });

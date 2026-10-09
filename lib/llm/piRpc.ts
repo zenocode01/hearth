@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 
 import { buildCliInvocation, parsePiEvent, resolveCliCommand, type CliChunk } from './cli';
 import { checkPiRuntime, piEnvExtra } from './piEnv';
+import { normalizeReasoningEffort } from './reasoning';
 
 /**
  * pi 的 **RPC 模式**运行器（`pi --mode rpc`）。
@@ -35,6 +36,12 @@ export interface PiRpcOptions {
   askUser?: (question: QuestionRequest) => Promise<QuestionAnswer>;
   command: string;
   prompt: string;
+  /**
+   * 思考等级（off/low/medium/high/xhigh）。发 prompt 之前先发一条
+   * `set_thinking_level` RPC 命令；空 = 用 pi 自己的默认（我们隔离环境里是 medium）。
+   * 差别很大：实测 high 36 秒 vs medium 12 秒。
+   */
+  reasoningEffort?: string | null;
   signal?: AbortSignal;
   systemPrompt?: string | null;
 }
@@ -83,6 +90,15 @@ export async function* runPiRpcAgent(options: PiRpcOptions): AsyncGenerator<CliC
     mimeType: image.mediaType,
     type: 'image' as const,
   }));
+
+  // 思考等级：**必须排在 prompt 之前**（stdin 是有序的，pi 按行处理命令）。
+  // 非法档位已在 normalizeReasoningEffort 过滤；pi 侧可用档位是
+  // low/medium/high/xhigh（get_available_thinking_levels），off 也能设成功只是不在列表里。
+  const effort = normalizeReasoningEffort(options.reasoningEffort);
+  if (effort) {
+    child.stdin.write(`${JSON.stringify({ level: effort, type: 'set_thinking_level' })}\n`);
+  }
+
   child.stdin.write(
     `${JSON.stringify({ images: images.length > 0 ? images : undefined, message: promptText, type: 'prompt' })}\n`,
   );

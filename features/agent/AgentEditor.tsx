@@ -23,6 +23,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { AsyncBoundary } from '@/components/AsyncBoundary';
 import { useIsMobile } from '@/components/useMediaQuery';
 import type { Agent } from '@/lib/db/schema';
+import { REASONING_EFFORTS } from '@/lib/llm/reasoning';
 
 import { AgentAvatar } from './AgentAvatar';
 import { AgentEditorSkeleton } from './AgentEditorSkeleton';
@@ -97,6 +98,7 @@ export function AgentEditor({ id }: AgentEditorProps) {
   const [cliCommand, setCliCommand] = useState('');
   const [model, setModel] = useState('');
   const [temperature, setTemperature] = useState(0.7);
+  const [reasoningEffort, setReasoningEffort] = useState('');
   const [models, setModels] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -124,6 +126,7 @@ export function AgentEditor({ id }: AgentEditorProps) {
       setCliCommand(agent.cliCommand ?? '');
       setModel(agent.model ?? '');
       setTemperature(agent.temperature ?? 0.7);
+      setReasoningEffort(agent.reasoningEffort ?? '');
       setLoadStatus('ready');
     } catch {
       setLoadStatus('error');
@@ -145,8 +148,28 @@ export function AgentEditor({ id }: AgentEditorProps) {
   }, []);
 
   const payload = useCallback(
-    () => ({ avatar, backgroundColor, cliCommand, model, name, runtime, systemPrompt, temperature }),
-    [avatar, backgroundColor, cliCommand, model, name, runtime, systemPrompt, temperature],
+    () => ({
+      avatar,
+      backgroundColor,
+      cliCommand,
+      model,
+      name,
+      reasoningEffort: reasoningEffort || null,
+      runtime,
+      systemPrompt,
+      temperature,
+    }),
+    [
+      avatar,
+      backgroundColor,
+      cliCommand,
+      model,
+      name,
+      reasoningEffort,
+      runtime,
+      systemPrompt,
+      temperature,
+    ],
   );
 
   const save = useCallback(async () => {
@@ -399,6 +422,30 @@ export function AgentEditor({ id }: AgentEditorProps) {
             </Text>
           </Flexbox>
         )}
+
+        {/* 思考等级：api 与 cli 都支持，所以放在两种运行方式的公共区域。
+            pi 走 RPC 的 set_thinking_level 命令；内置模型走 providerOptions.reasoningEffort。 */}
+        <Field label="思考等级">
+          <Select
+            options={[
+              { label: '默认（不干预）', value: '' },
+              ...REASONING_EFFORTS.map((item) => ({ label: item.label, value: item.value })),
+            ]}
+            value={reasoningEffort}
+            onChange={(value) => setReasoningEffort(value as string)}
+          />
+          <Text style={{ fontSize: 12, marginTop: 4 }} type="secondary">
+            {reasoningEffort === 'off'
+              ? '关闭思考：最快，适合闲聊与简单任务。'
+              : reasoningEffort === ''
+                ? '默认：交给运行方（内置模型用模型默认；pi 用它配置里的 medium）。'
+                : '等级越高思考越久。'}
+          </Text>
+          <Text style={{ fontSize: 12 }} type="warning">
+            ⚠ 档位是否真生效由模型决定：模型不支持的档位会被静默忽略（例如 6001 的 flash 模型
+            关不掉思考，高会被当成极高）。
+          </Text>
+        </Field>
       </Flexbox>
 
       {/* 测试结果 */}
