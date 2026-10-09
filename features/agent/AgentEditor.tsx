@@ -99,6 +99,12 @@ export function AgentEditor({ id }: AgentEditorProps) {
   const [model, setModel] = useState('');
   const [temperature, setTemperature] = useState(0.7);
   const [reasoningEffort, setReasoningEffort] = useState('');
+  // 该 Agent 当前模型**真正支持**的思考档位；null = 不知道，不做限制
+  const [levelCaps, setLevelCaps] = useState<{
+    aliases: Record<string, string>;
+    modelId: string | null;
+    supported: string[] | null;
+  } | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -146,6 +152,21 @@ export function AgentEditor({ id }: AgentEditorProps) {
       .then((data: { models?: string[] }) => setModels(data.models ?? []))
       .catch(() => setModels([]));
   }, []);
+
+  // 思考档位能力门：模型不支持的档位直接从下拉里去掉
+  useEffect(() => {
+    const query = isNew ? '' : `?agentId=${encodeURIComponent(id)}`;
+    void fetch(`/api/reasoning/levels${query}`)
+      .then((res) => res.json())
+      .then((data: { aliases?: Record<string, string>; modelId?: string | null; supported?: string[] | null }) =>
+        setLevelCaps({
+          aliases: data.aliases ?? {},
+          modelId: data.modelId ?? null,
+          supported: data.supported ?? null,
+        }),
+      )
+      .catch(() => setLevelCaps(null));
+  }, [id, isNew, runtime]);
 
   const payload = useCallback(
     () => ({
@@ -429,21 +450,31 @@ export function AgentEditor({ id }: AgentEditorProps) {
           <Select
             options={[
               { label: '默认（不干预）', value: '' },
-              ...REASONING_EFFORTS.map((item) => ({ label: item.label, value: item.value })),
+              ...REASONING_EFFORTS.filter(
+                (item) => !levelCaps?.supported || levelCaps.supported.includes(item.value),
+              ).map((item) => ({
+                // 模型把档位改了名（如 high → xhigh）时说清楚，别让"高"和"极高"看起来一样
+                label: levelCaps?.aliases?.[item.value]
+                  ? `${item.label}（该模型按「${levelCaps.aliases[item.value]}」跑）`
+                  : item.label,
+                value: item.value,
+              })),
             ]}
             value={reasoningEffort}
             onChange={(value) => setReasoningEffort(value as string)}
           />
+          {/* 已经存了、但当前模型不支持的档位：不静默改掉用户设置，只提示 */}
+          {reasoningEffort && levelCaps?.supported && !levelCaps.supported.includes(reasoningEffort) ? (
+            <Text style={{ fontSize: 12 }} type="warning">
+              当前设置「{reasoningEffort}」这个模型不支持，不会生效（已从上面的选项里去掉）。
+            </Text>
+          ) : null}
           <Text style={{ fontSize: 12, marginTop: 4 }} type="secondary">
-            {reasoningEffort === 'off'
-              ? '关闭思考：最快，适合闲聊与简单任务。'
-              : reasoningEffort === ''
-                ? '默认：交给运行方（内置模型用模型默认；pi 用它配置里的 medium）。'
+            {levelCaps?.supported
+              ? `只列出 ${levelCaps.modelId ?? '当前模型'} 真正支持的档位——不支持的档位选了也不会报错，但不会有任何变化。`
+              : reasoningEffort === 'off'
+                ? '关闭思考：最快，适合闲聊与简单任务。'
                 : '等级越高思考越久。'}
-          </Text>
-          <Text style={{ fontSize: 12 }} type="warning">
-            ⚠ 档位是否真生效由模型决定：模型不支持的档位会被静默忽略（例如 6001 的 flash 模型
-            关不掉思考，高会被当成极高）。
           </Text>
         </Field>
       </Flexbox>
