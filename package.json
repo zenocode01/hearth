@@ -9,6 +9,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "mock:llm": "node scripts/mock-llm.mjs",
+    "pi:setup": "node scripts/setup-pi-runtime.mjs",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio"
   },

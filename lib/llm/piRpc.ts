@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 
 import { buildCliInvocation, parsePiEvent, resolveCliCommand, type CliChunk } from './cli';
+import { checkPiRuntime, piEnvExtra } from './piEnv';
 
 /**
  * pi 的 **RPC 模式**运行器（`pi --mode rpc`）。
@@ -55,8 +56,13 @@ export async function* runPiRpcAgent(options: PiRpcOptions): AsyncGenerator<CliC
   const promptText = invocation.stdin ?? options.prompt;
 
   const { args, file } = resolveCliCommand(invocation.file, invocation.args);
+
+  // 隔离环境没准备好就**早失败**，别让 pi 吐一堆英文 provider 错误
+  const runtime = checkPiRuntime();
+  if (!runtime.ok) throw new Error(runtime.error ?? '项目内 pi 环境未就绪');
+
   const child = spawn(file, args, {
-    env: { ...process.env, ...invocation.env },
+    env: { ...process.env, ...invocation.env, ...piEnvExtra() },
     shell: false,
     windowsHide: true,
   });

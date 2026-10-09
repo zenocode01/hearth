@@ -3,6 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { checkPiRuntime, looksLikePiCommand, piEnvExtra } from './piEnv';
+
 /**
  * 外部 CLI agent 运行器（参考 refs 的 heterogeneous agents，取其最小可用子集）。
  *
@@ -384,10 +386,17 @@ export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliCh
 
   const detail = describeCommand(file, args);
 
+  // pi 走项目内隔离环境（别的 CLI 不动）
+  const isPi = looksLikePiCommand(file);
+  if (isPi) {
+    const runtime = checkPiRuntime();
+    if (!runtime.ok) throw new Error(runtime.error ?? '项目内 pi 环境未就绪');
+  }
+
   let child;
   try {
     child = spawn(file, args, {
-      env: { ...process.env, ...invocation.env },
+      env: { ...process.env, ...invocation.env, ...(isPi ? piEnvExtra() : {}) },
       shell: false,
       windowsHide: true,
     });
