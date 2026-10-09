@@ -126,13 +126,52 @@ function coveredThroughIndex(messages: UIMessage[], summary: TopicSummary | null
   return index < 0 ? 0 : index + 1;
 }
 
+/**
+ * 摘要提示词——**学 pi 的 compaction 方法**（pi 的 `SUMMARIZATION_SYSTEM_PROMPT` /
+ * `SUMMARIZATION_PROMPT` / `UPDATE_SUMMARIZATION_INSTRUCTIONS`，见其 bundle）：
+ * 输出结构化 checkpoint，让另一个 LLM 能据此接着干；带旧摘要时走"更新"指令，
+ * 保留已有信息、把进行中移入已完成。分段用中文表头，便于用户在 ContextMeter 里直接读。
+ */
 const SUMMARY_SYSTEM = [
-  '你是会话压缩器。把给出的对话历史压成一份「上下文摘要」，供后续对话继续使用时参考。',
-  '要求：',
-  '- 用简体中文，条目化（用 - 开头），总量控制在 400 字以内。',
-  '- 必须保留：用户的目标与意图、已确认的结论、进行中的事项/待办、关键事实（路径、文件名、数字、标识符、代码要点）、用户明确说过的偏好。',
-  '- 可以丢掉：客套话、重复表述、被后续内容推翻的旧结论（只保留最新结论）、思考过程。',
-  '- 只输出摘要正文，不要解释、不要开场白。',
+  '你是一个上下文压缩助手。读一段用户与 AI 助手的对话，按指定格式产出结构化摘要。',
+  '不要继续这段对话，不要回答其中的任何问题，只输出摘要本身。',
+].join('\n');
+
+/** 首次压缩用的格式（对应 pi 的 SUMMARIZATION_PROMPT）。 */
+const SUMMARY_FORMAT = [
+  '把上面的对话压成一份结构化的「上下文 checkpoint」，供另一个 LLM 据此继续工作。',
+  '严格用以下格式：',
+  '## 目标',
+  '[用户想达成什么？可能有多项]',
+  '## 约束与偏好',
+  '- [用户提出的约束/偏好；没有就写"（无）"]',
+  '## 进度',
+  '### 已完成',
+  '- [x] [已完成的事]',
+  '### 进行中',
+  '- [ ] [当前在做的事]',
+  '### 受阻',
+  '- [阻塞项，若有]',
+  '## 关键决策',
+  '- **[决策]**：[简要理由]',
+  '## 下一步',
+  '1. [接下来该做什么，按顺序]',
+  '## 关键上下文',
+  '- [继续工作所需的数据/示例/引用；没有就写"（无）"]',
+  '每节保持精简。**必须原样保留**文件路径、函数名、标识符与报错原文。',
+].join('\n');
+
+/** 滚动压缩：把新历史并入旧摘要（对应 pi 的 UPDATE_SUMMARIZATION_INSTRUCTIONS）。 */
+const SUMMARY_UPDATE = [
+  '把新的对话消息并入 <previous-summary> 里的既有摘要。规则：',
+  '- 保留既有摘要里的全部信息；',
+  '- 补充新消息里的进度、决策与上下文；',
+  '- 更新「进度」：完成的事项从「进行中」移到「已完成」；',
+  '- 依据已完成的工作更新「下一步」；',
+  '- **必须原样保留**文件路径、函数名与报错原文；',
+  '- 已不再相关的内容可以删掉。',
+  '',
+  '严格沿用同一套格式（## 目标 / ## 约束与偏好 / ## 进度 / ## 关键决策 / ## 下一步 / ## 关键上下文）。',
 ].join('\n');
 
 /** 调模型生成摘要（滚动：带上旧摘要让它合并）。 */
@@ -141,17 +180,24 @@ async function summarize(input: {
   older: UIMessage[];
   previous: string | null;
 }): Promise<string> {
+  const conversation = renderTranscript(input.older);
+  const instruction = input.previous
+    ? `下面的对话是**新增**的历史，请并入 <previous-summary> 里的既有摘要。\n\n${SUMMARY_UPDATE}`
+    : SUMMARY_FORMAT;
   const prompt = [
-    input.previous
-      ? `已有摘要（把它和新历史合并；两处冲突时以新历史为准）：\n<summary>\n${input.previous}\n</summary>`
-      : '',
-    `需要并入的对话：\n<conversation>\n${renderTranscript(input.older)}\n</conversation>`,
-    '输出合并后的完整摘要。',
+    instruction,
+    input.previous ? `<previous-summary>\n${input.previous}\n</previous-summary>` : '',
+    `<conversation>\n${conversation}\n</conversation>`,
   ]
     .filter(Boolean)
     .join('\n\n');
 
-  const { text } = await generateText({ maxOutputTokens: 900, model: input.model, prompt, system: SUMMARY_SYSTEM });
+  const { text } = await generateText({
+    maxOutputTokens: 1_500,
+    model: input.model,
+    prompt,
+    system: SUMMARY_SYSTEM,
+  });
   return text.trim().slice(0, SUMMARY_MAX_CHARS);
 }
 
@@ -286,7 +332,8 @@ export function topicContextStats(topicId: string) {
 export function withSummaryInstruction(systemPrompt: string | null | undefined, summary: string | null): string | undefined {
   const parts = [
     systemPrompt?.trim(),
-    summary ? `<conversation_summary>\n${summary}\n</conversation_summary>` : '',
+    // 学 pi 的注入措辞：一句话说明"前面被压缩了"，再给 <summary> 本体
+    summary ? `此前的对话历史已压缩成以下摘要：\n<summary>\n${summary}\n</summary>` : '',
   ].filter(Boolean);
   return parts.length > 0 ? parts.join('\n\n') : undefined;
 }
