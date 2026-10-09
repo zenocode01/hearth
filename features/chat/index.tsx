@@ -5,7 +5,7 @@ import { Button, Flexbox, Icon, Text, copyToClipboard } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
 import { ThinkIcon } from '@lobehub/ui/icons';
 import type { UIMessage } from 'ai';
-import { PanelLeft } from 'lucide-react';
+import { PanelLeft, Paperclip } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -13,8 +13,10 @@ import { ThemeControls } from '@/components/ThemeControls';
 import { useIsMobile } from '@/components/useMediaQuery';
 import { parseStoredParts, deserializeParts } from '@/lib/db/messageParts';
 import type { Agent, ChatMessage, Topic } from '@/lib/db/schema';
+import { IMAGE_ACCEPT } from '@/lib/files/constants';
 import { parseToolSettings, type ToolSetting } from '@/lib/tools/settings';
 
+import { AttachmentPreview } from './AttachmentPreview';
 import { BackBottom } from './BackBottom';
 import { ChatComposer } from './ChatComposer';
 import { EmptyState } from './EmptyState';
@@ -27,6 +29,7 @@ import { QuestionBar } from './QuestionBar';
 import { TodoPanel } from './TodoPanel';
 import { ToolPicker } from './ToolPicker';
 import { TopicSidebar } from './TopicSidebar';
+import { useAttachments } from './useAttachments';
 import { usePendingRuns } from './usePendingRuns';
 
 /** 距底多少像素内算"在底部" */
@@ -60,6 +63,10 @@ export function ChatView() {
   const skipHistoryForRef = useRef<string | null>(null);
   /** 当前聊天流是为哪个会话开的（挂起在提问上时，用来判断这条流属不属于它） */
   const streamTopicIdRef = useRef<string | null>(null);
+  /** 隐藏的选文件 input（附件按钮点它） */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  /** 待发送附件（已上传到 /uploads，随消息一起发） */
+  const attachments = useAttachments();
 
   /**
    * 拉会话列表。**默认静默**：发送消息 / 改名 / 删除之后的刷新不闪骨架屏；
@@ -306,8 +313,16 @@ export function ChatView() {
     setAtBottom(true);
     requestStartedAtRef.current = Date.now();
     streamTopicIdRef.current = topicId;
+    // 附件随消息一起发：消息里落 file 片段（URL 形态），发模型前才转 base64/image part
+    const files = attachments.items.map((item) => ({
+      filename: item.filename,
+      mediaType: item.mediaType,
+      type: 'file' as const,
+      url: item.url,
+    }));
+    attachments.clear();
     void sendMessage(
-      { text },
+      { files, text },
       {
         body: {
           agentId: activeAgentId ?? undefined,
@@ -317,7 +332,16 @@ export function ChatView() {
       },
     );
     requestAnimationFrame(() => scrollToBottom(false));
-  }, [activeAgentId, activeTopicId, draft, refreshTopics, scrollToBottom, sendMessage, toolSettings]);
+  }, [
+    activeAgentId,
+    activeTopicId,
+    attachments,
+    draft,
+    refreshTopics,
+    scrollToBottom,
+    sendMessage,
+    toolSettings,
+  ]);
 
   /** 消息操作：复制 / 放回输入框 / 重新生成 / 删除。 */
   const handleMessageAction = useCallback(
@@ -417,7 +441,8 @@ export function ChatView() {
     setSidebarOpen(false);
     setActiveTopicId(null);
     setMessages([]);
-  }, [clearError, keepStream, setMessages, stop]);
+    attachments.clear();
+  }, [attachments, clearError, keepStream, setMessages, stop]);
 
   const handleSelect = useCallback(
     (id: string) => {
@@ -425,9 +450,10 @@ export function ChatView() {
       if (!keepStream) stop();
       clearError();
       setSidebarOpen(false);
+      attachments.clear();
       setActiveTopicId(id);
     },
-    [activeTopicId, clearError, keepStream, stop],
+    [activeTopicId, attachments, clearError, keepStream, stop],
   );
 
   const handleDelete = useCallback(
@@ -635,8 +661,35 @@ export function ChatView() {
         <QuestionBar pendings={pendingQuestions} />
 
         <ChatComposer
+          attachButton={
+            <Button
+              disabled={hasPendingQuestion}
+              icon={Paperclip}
+              onClick={() => fileInputRef.current?.click()}
+              size="small"
+              title="添加图片（也可以拖进来或直接粘贴）"
+              type="text"
+            />
+          }
+          attachmentSlot={
+            attachments.items.length > 0 || attachments.uploading ? (
+              <>
+                <AttachmentPreview
+                  items={attachments.items}
+                  uploading={attachments.uploading}
+                  onRemove={attachments.remove}
+                />
+                {attachments.error && (
+                  <Text style={{ color: 'var(--ant-color-error, #ff4d4f)', fontSize: 12 }} type="secondary">
+                    {attachments.error}
+                  </Text>
+                )}
+              </>
+            ) : null
+          }
           busy={busy}
           disabled={hasPendingQuestion}
+          onFiles={(files) => void attachments.addFiles(files)}
           toolPicker={
             <ToolPicker
               agentId={activeAgentId}
@@ -648,6 +701,19 @@ export function ChatView() {
           onChange={setDraft}
           onSend={() => void handleSend()}
           onStop={stop}
+        />
+        {/* 选文件入口（隐藏 input；附件按钮/拖拽/粘贴都汇到 attachments.addFiles） */}
+        <input
+          accept={IMAGE_ACCEPT}
+          multiple
+          ref={fileInputRef}
+          style={{ display: 'none' }}
+          type="file"
+          onChange={(event) => {
+            if (event.target.files?.length) void attachments.addFiles(event.target.files);
+            // 清空：否则连续选同一个文件不会再触发 change
+            event.target.value = '';
+          }}
         />
       </div>
     </div>

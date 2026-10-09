@@ -20,6 +20,9 @@ data/
 *.db-wal
 *.db-shm
 
+# 用户上传的附件（消息里只存 /uploads 引用，文件本体不入库）
+public/uploads/
+
 # 日志与缓存
 *.log
 .cache/

@@ -9,6 +9,8 @@ import type { UIMessage } from 'ai';
 export type StoredPart =
   | { text: string; type: 'reasoning' }
   | { text: string; type: 'text' }
+  /** 附件（图片/文件）：只存 URL + 类型 + 原名，二进制在 public/uploads */
+  | { filename?: string; mediaType: string; type: 'file'; url: string }
   | {
       errorText?: string;
       input?: unknown;
@@ -31,6 +33,16 @@ export function serializeParts(parts: UIMessage['parts']): StoredPart[] {
     }
     if (part.type === 'reasoning') {
       stored.push({ text: part.text, type: 'reasoning' });
+      continue;
+    }
+    if (part.type === 'file') {
+      // 附件只存引用（url/类型/原名），base64 不入库
+      stored.push({
+        filename: part.filename,
+        mediaType: part.mediaType,
+        type: 'file',
+        url: part.url,
+      });
       continue;
     }
 
@@ -67,6 +79,14 @@ export function deserializeParts(stored: StoredPart[]): UIMessage['parts'] {
   const parts: unknown[] = stored.map((part) => {
     if (part.type === 'text') return { text: part.text, type: 'text' };
     if (part.type === 'reasoning') return { text: part.text, type: 'reasoning' };
+    if (part.type === 'file') {
+      return {
+        filename: part.filename,
+        mediaType: part.mediaType,
+        type: 'file',
+        url: part.url,
+      };
+    }
     return {
       errorText: part.errorText,
       input: part.input,

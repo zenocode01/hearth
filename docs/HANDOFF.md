@@ -21,7 +21,7 @@
 ## 2. 现在在哪（进度）
 
 - **阶段 0~4 全部完成**：骨架 + 主题动画 · 流式聊天 · SQLite 持久化 · Agent 管理 · 打磨（三态/启动占位/响应式）
-- **阶段 5 进行中**：✅ **L2-11 工具调用**（内置工具 + 工具卡片 + 开关）；✅ **L2-15 导出/备份**（侧栏导出 .md/.json）；⏭️ 用户明确**跳过 L2-10 图片生成**；✅ **提问栏对齐**（跨会话 island + 徽章 + 注册表兜底 + "全部同意"位，待 commit）
+- **阶段 5 进行中**：✅ **L2-11 工具调用**（内置工具 + 工具卡片 + 开关）；✅ **L2-15 导出/备份**（侧栏导出 .md/.json）；✅ **提问栏对齐**（跨会话 island + 徽章 + 注册表兜底 + "全部同意"位）；✅ **L2-9 图片附件**（图片发给 AI：内置模型多模态 + pi 传图，2026-10-09）；⏭️ 用户明确**跳过 L2-10 图片生成**
 - **额外（超出原路线图）**：**外部 CLI Agent** 深度集成（pi / opencode / claude），尤其是 **pi**：
   思考流、工具卡片、todo 清单、question 提问、工具开关
 
@@ -33,13 +33,14 @@
 | pi 思考流 | `d5d9e63` | 解析 pi 的 JSONL：`thinking_delta`→推理块、`text_delta`→正文；**不做事件白名单** |
 | 内置工具调用 | `3b4802c` | `lib/llm/tools.ts`（计算器/当前时间/抓网页）+ `stopWhen` 多步 + 工具卡片 + 片段落库 `messages.parts` |
 | 工具列表与开关 | `078c364` `631e72d` `321f92d` `27b783b` | 输入框 ActionBar 入口 + Popover；pi 运行时显示**pi 的工具**（内置 8 + 扩展，实时读 settings/会话）；开关随会话保存并注入 `--tools +x` / `--exclude-tools y` |
-| 工具开关修复 | *（见 git log）* | pi 默认关的工具（powershell/grep/find/ls）开关点不动：归一成"无覆盖"后 pi 的默认"关"又赢回来 → 归一时只丢"本来就开着"的 auto |
+| 工具开关修复 | `9b70171` | pi 默认关的工具（powershell/grep/find/ls）开关点不动：归一成"无覆盖"后 pi 的默认"关"又赢回来 → 归一时只丢"本来就开着"的 auto |
+| 图片附件 L2-9 | *（本次）* | `lib/files/`（uploads 服务 + **客户端安全**常量）→ `POST /api/files`（sha1 命名落 `public/uploads`，DB 只存引用）→ `useAttachments` + `AttachmentPreview`（选文件/拖拽/粘贴、缩略图+自写灯箱）→ `sendMessage({ files })` → 路由转模型 `file` part（内置模型）/ `prompt.images`（pi）；`StoredPart` 加 file 变体、**用户消息也落 parts**（否则刷新丢图）；踩坑与取舍见 `.agents/skills/attachments-multimodal` |
 | pi 工具卡片 | `515d474` | `toolcall_end` / `role=toolResult` → UI 工具片段；刷新后卡片保留 |
 | todo UI | `a1246fe` | 工具卡片渲染 ✓/○ 清单 + 输入框上方**任务清单面板**（清单在工具结果 `details` 里，随消息持久化） |
 | question UI | `36f0d1e` `bedbdf9` | **RPC 模式**运行器 + 对话协议 + 等待回答的注册表/接口 + **输入框上方的提问栏**（pending 时内联不渲染、输入框禁用） |
 | 改名 & 打磨 | `5dfec42` `be49ef3` `0a9e978` `e5e8dd1` | pi-web → **Hearth**（含内部前缀迁移）；移动端响应式；三态 + 启动占位 + 路由级 loading/预取 |
 | 导出/备份 L2-15 | `173e78c` | 侧栏会话行导出按钮（Popover 选 .md/.json，fetch→blob 下载 + toast）；`GET /api/topics/[id]/export` 附件下载（中文文件名 `filename*`）；`lib/export/topicExport` 纯逻辑（md 含推理 details、json 无损） |
-| 提问栏对齐 | *（待 commit）* | 注册表 v2（`topicId/input/method` + `listPendingQuestions`）+ `GET /api/cli-runs` 轮询（`usePendingRuns` 3s）→ **跨会话 island**（`PendingIsland`：chip+Popover+条件"全部同意"）+ 侧栏 ❓ 徽章；`QuestionBar` 收数组（>1 渲染 tab）、`mergePendingQuestions` 注册表兜底（切走/刷新后重建）；**切会话 `keepStream` 不 stop 挂起流** + `streamBlocked` 不算 busy；仓外修复 `~/.pi/agent/extensions/question.ts` 放行 rpc（`ctx.ui.select`） |
+| 提问栏对齐 | `12ec940` | 注册表 v2（`topicId/input/method` + `listPendingQuestions`）+ `GET /api/cli-runs` 轮询（`usePendingRuns` 3s）→ **跨会话 island**（`PendingIsland`：chip+Popover+条件"全部同意"）+ 侧栏 ❓ 徽章；`QuestionBar` 收数组（>1 渲染 tab）、`mergePendingQuestions` 注册表兜底（切走/刷新后重建）；**切会话 `keepStream` 不 stop 挂起流** + `streamBlocked` 不算 busy；仓外修复 `~/.pi/agent/extensions/question.ts` 放行 rpc（`ctx.ui.select`） |
 
 ## 4. 关键文件地图（本轮重点）
 
@@ -51,14 +52,18 @@
 | `lib/llm/piTools.ts` | pi 工具清单（内置/会话 `<tools>` 段/本地扩展）+ `buildPiToolFlags` 开关注入 |
 | `lib/llm/tools.ts` | Hearth 内置工具定义 + `TOOL_CATALOG`（UI 与模型**同源**） |
 | `lib/tools/settings.ts` | 工具开关纯逻辑（**不 import `ai`**，客户端可用） |
-| `lib/db/messageParts.ts` | 消息片段与 AI SDK 的双向映射（刻意解耦，SDK 升级不污染历史） |
+| `lib/db/messageParts.ts` | 消息片段与 AI SDK 的双向映射（刻意解耦，SDK 升级不污染历史；含 file 附件片段） |
+| `lib/files/constants.ts` | 附件类型白名单/体积上限/`accept`（**纯常量，客户端可 import**） |
+| `lib/files/uploads.ts` | 附件落盘：校验 → sha1 命名 → 写 `public/uploads`；读回字节/base64（**仅服务端**） |
+| `lib/llm/attachments.ts` | UI file 片段 → 模型 `file` part（内置模型）/ base64 图片（pi）；只发当前轮图片 |
+| `app/api/files/route.ts` | POST 上传附件（图片） |
 | `app/api/chat/route.ts` | 聊天主路由：API 分支（工具）/ CLI 分支（json 或 RPC）/ 落库 |
 | `app/api/tools/route.ts` | 按运行时返回工具目录（builtin / pi / external） |
 | `app/api/topics/[id]/export/route.ts` | 会话导出（?format=md\|json，附件下载） |
 | `lib/export/topicExport.ts` | 导出纯逻辑：Markdown 渲染 / JSON 备份 / 文件名清洗 |
 | `app/api/cli-runs/[id]/answer/route.ts` | 提交"提问"的答案 |
 | `app/api/cli-runs/route.ts` | GET 跨会话 pending 列表（island/徽章的轮询口） |
-| `features/chat/` | `index.tsx`（主视图）、`ToolCard`、`ToolPicker`、`TodoPanel`、`QuestionBar`、`QuestionForm`、`PendingIsland`、`usePendingRuns`、`interventions.ts` |
+| `features/chat/` | `index.tsx`（主视图）、`ToolCard`、`ToolPicker`、`TodoPanel`、`QuestionBar`、`QuestionForm`、`PendingIsland`、`usePendingRuns`、`useAttachments`、`AttachmentPreview`、`interventions.ts` |
 | `features/agent/` | Agent 列表/编辑页、`AgentAvatar`、`agentIcons`（品牌头像）、骨架 |
 | `components/` | 主题壳、启动占位、`AsyncBoundary`、骨架、`useMediaQuery` |
 | `.agents/skills/` | 领域细则（**改动相关领域前先读**：`builtin-tools`、`chat-streaming`、`agent-management`、`ui-theming`、`topics-persistence`…） |
@@ -95,10 +100,15 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
 
 - **L2-10 图片生成**：用户明确跳过（`image-generation` skill 还在，别当成待办）。
 - **MCP（L2-12）**：未做。`ToolCard` 已能渲染 `dynamic-tool`，接入时可直接复用。
-- **提问栏对齐已做大半**（2026-10-08，待 commit）：多 pending tab（防备位）+ 跨会话 island/徽章 + 注册表兜底重建 + "全部同意"按钮位。**剩余**：
+- **提问栏对齐已做**（2026-10-08，`12ec940`）：多 pending tab（防备位）+ 跨会话 island/徽章 + 注册表兜底重建 + "全部同意"按钮位。**剩余**：
   - "全部同意"只在全部 `method === 'confirm'` 时出现，而 question 工具走 `select` → **该路径没实测过**（需要一个会发 confirm 对话的场景）；
   - **僵尸标记**：run 中途被杀（旧 bug/直接杀进程）后，DB 里留在 `input-available` 的提问片段刷新后仍渲染提问栏，提交回 404（"回答提交失败"）——旧测试会话删掉即可，要不要做"按注册表过滤标记"待定；
   - **刷新页面会杀挂起的 pi**（fetch 断 → `req.signal` → kill），注册表条目留到有人回答才自清；设计上要"断流重连"才能根治（大改，先记着）。
+- **附件只做了图片**（L2-9 A 期，2026-10-09）：文本/Office/PDF 还没做（B/C 期，见 §8）。已知取舍与坑见 `.agents/skills/attachments-multimodal`：
+  - **只有当前轮的图片进模型**（历史里的附件只留文字）——看旧图要用户重发；
+  - `public/uploads/` **没有清理机制**（同内容 sha1 去重，但删除会话不会删文件）；
+  - 只放行 4 种图片格式、单文件 5MB、单条消息 6 个附件（`lib/files/constants.ts` 一处改）；
+  - **非 RPC 的外部 CLI**（json 模式的 opencode 等）传不了图，附件会被静默忽略。
 - **pi 工具开关**：`grep` 做过行为验证；`powershell/ls/find` 机制相同但未逐一实测。
 - **pi 出错时界面静默**：已修（2026-10-08）——`parsePiEvent` 现在把 assistant `message_end` 的 `errorMessage` 透出成可读正文（`humanizePiError`：401/403/404/429 各有指引），坏 key 实测显示"⚠️ pi 调用模型失败：…检查 ~/.pi/agent/models.json"。
 - **i18n（L2-8）**：未做。
@@ -108,6 +118,7 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
 
 1. **MCP 接入（L2-12）**：把 MCP server 的工具转成 `dynamicTool`，UI 复用 ToolCard；参考 `refs/lobe-chat/packages/heterogeneous-agents/src/mcp`。
 2. **个人记忆（L2-13）**：`user_memory` 表 + "我的记忆"页 + 对话前拼进提示词。
-3. **提问栏收尾**：实测"全部同意"（confirm 路径）；可选：僵尸标记按注册表过滤、挂起流断流重连（见 §7）。
+3. **附件 B 期（文本文件）**：txt/md/json/csv/log 直接读内容注入（零依赖；注意 provider 对 `data.type='text'` 的 file part 会抛，要转成文本段）。
+4. **附件 C 期（Office/PDF）**：用户已批 `fflate` + `pdfjs-dist`；.docx/.xlsx/.pptx 走 zip+xml 自己抽文本，PDF 用 pdfjs-dist；**旧格式 .doc/.ppt/.xls 明确提示不支持**（本机无 LibreOffice/antiword）。
 
 > 工作节奏见 `vibe-coding-discipline` skill：**小步**（一次一个小功能）、随时能跑、验收后立刻 commit、约定变了先改 AGENTS.md/skill。

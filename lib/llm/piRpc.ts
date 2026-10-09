@@ -28,6 +28,8 @@ export interface QuestionAnswer {
 }
 
 export interface PiRpcOptions {
+  /** 当前轮的图片附件（base64）。pi 的 prompt 命令支持 images，见 ImageContent */
+  images?: Array<{ data: string; mediaType: string }>;
   /** 需要用户输入时调用；不传或抛错 → 视为取消 */
   askUser?: (question: QuestionRequest) => Promise<QuestionAnswer>;
   command: string;
@@ -68,7 +70,16 @@ export async function* runPiRpcAgent(options: PiRpcOptions): AsyncGenerator<CliC
   });
 
   // 发起这一轮的提示词
-  child.stdin.write(`${JSON.stringify({ message: promptText, type: 'prompt' })}\n`);
+  // pi 的 RPC prompt 命令支持 images：`{ type:'image', mimeType, data:<base64> }`
+  // （ImageContent.data 是 base64 字符串）。不带图时不要带这个字段。
+  const images = (options.images ?? []).map((image) => ({
+    data: image.data,
+    mimeType: image.mediaType,
+    type: 'image' as const,
+  }));
+  child.stdin.write(
+    `${JSON.stringify({ images: images.length > 0 ? images : undefined, message: promptText, type: 'prompt' })}\n`,
+  );
 
   const queue: Array<
     | { event: { id: string; method: string; options?: string[]; placeholder?: string; title?: string }; kind: 'dialog' }

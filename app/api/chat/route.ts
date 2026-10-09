@@ -1,5 +1,4 @@
 import {
-  convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
   InvalidToolInputError,
@@ -17,6 +16,7 @@ import { createId } from '@/lib/db/id';
 import { serializeParts } from '@/lib/db/messageParts';
 import { agents, messages as messagesTable, topics } from '@/lib/db/schema';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
+import { currentTurnImages, toModelMessagesWithImages } from '@/lib/llm/attachments';
 import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
 import { createRun, endRun, waitForQuestion } from '@/lib/llm/cliRuns';
 import { buildPiToolFlags, isPiCommand } from '@/lib/llm/piTools';
@@ -104,10 +104,20 @@ export async function POST(req: Request) {
   if (topicId) {
     const lastUser = [...uiMessages].reverse().find((message) => message.role === 'user');
     const text = lastUser ? textOf(lastUser) : '';
-    if (lastUser && text) {
+    // 附件（图片）也要落：只存文本的话刷新后图片就没了（parts 里是 /uploads 引用）
+    const userParts = lastUser ? serializeParts(lastUser.parts) : [];
+    const hasFile = userParts.some((part) => part.type === 'file');
+    if (lastUser && (text || hasFile)) {
       try {
         db.insert(messagesTable)
-          .values({ content: text, createdAt: new Date(), id: lastUser.id, role: 'user', topicId })
+          .values({
+            content: text,
+            createdAt: new Date(),
+            id: lastUser.id,
+            parts: userParts.length > 0 ? JSON.stringify(userParts) : null,
+            role: 'user',
+            topicId,
+          })
           .onConflictDoNothing()
           .run();
       } catch (error) {
@@ -248,6 +258,8 @@ export async function POST(req: Request) {
 
           const runner = useRpc
             ? runPiRpcAgent({
+                // 当前轮的图片附件（pi 的 prompt 命令收 base64；json 模式传不了图）
+                images: await currentTurnImages(uiMessages),
                 askUser: async (request) => {
                   // 把「等待回答」标在 question 工具卡片上（带上回答所需的 runId / requestId）
                   if (!pendingQuestion) return { cancelled: true };
@@ -316,7 +328,9 @@ export async function POST(req: Request) {
     model,
     // v7 不允许在 messages 里放 system 消息，人设走 instructions
     instructions: agent?.systemPrompt ?? undefined,
-    messages: await convertToModelMessages(uiMessages),
+    // 自己转：附件是 /uploads 相对路径，SDK 的 convertToModelMessages 走 new URL() 会抛；
+    // 且只把**当前轮**的图片转成 image part（历史附件只留文字，见 lib/llm/attachments.ts）
+    messages: await toModelMessagesWithImages(uiMessages),
     temperature: agent?.temperature ?? undefined,
     // 内置工具（L2-11）：按会话开关筛选；模型主动调用 → 服务端执行 → 结果回填后继续生成
     tools: Object.keys(chatToolsForTurn).length > 0 ? chatToolsForTurn : undefined,

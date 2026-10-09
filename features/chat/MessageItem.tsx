@@ -4,6 +4,7 @@ import { Markdown } from '@lobehub/ui';
 import { isToolUIPart, type UIMessage } from 'ai';
 import { memo } from 'react';
 
+import { AttachmentPreview } from './AttachmentPreview';
 import { MessageActions, type MessageActionKey } from './MessageActions';
 import { ReasoningBlock } from './ReasoningBlock';
 import { ToolCard } from './ToolCard';
@@ -29,6 +30,15 @@ export const MessageItem = memo(({ message, startedAt, busy, onAction }: Message
     .map((part) => (part.type === 'text' ? part.text : ''))
     .join('');
   const hasText = text.trim().length > 0;
+  // 附件（图片）：只存 /uploads 引用，这里渲染缩略图 + 点开大图
+  const files = message.parts
+    .filter((part) => part.type === 'file')
+    .map((part) => ({
+      filename: part.filename ?? '图片',
+      mediaType: part.mediaType,
+      size: 0,
+      url: part.url,
+    }));
   // 历史消息从 metadata 里取已持久化的思考耗时
   const persistedReasoningMs = (message.metadata as { reasoningMs?: number } | undefined)
     ?.reasoningMs;
@@ -43,6 +53,10 @@ export const MessageItem = memo(({ message, startedAt, busy, onAction }: Message
         gap: 2,
       }}
     >
+      {isUser && files.length > 0 && (
+        <AttachmentPreview items={files} size={96} />
+      )}
+
       <div
         style={{
           background: isUser ? 'var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.06))' : undefined,
