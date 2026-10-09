@@ -44,17 +44,12 @@ export async function GET(_req: Request, { params }: Params) {
  * POST —— 手动压缩一次（对应 chip 里的「立即压缩」）。
  *
  * 走的是与自动压缩完全相同的代码（prepareContext + force），只是跳过阈值判定。
+ * 内置模型与外部 CLI（pi 等）都适用——CLI 会话也用我们自己的压缩（事实来源是 DB）。
  * 失败必须可读：这是用户主动点的按钮，静默失败最招烦。
  */
 export async function POST(_req: Request, { params }: Params) {
   const { id } = await params;
   const agent = agentOf(id);
-  if (agent?.runtime === 'cli') {
-    return Response.json(
-      { error: '这个会话用的是外部 CLI Agent，它有自己的上下文压缩，这里不处理。' },
-      { status: 400 },
-    );
-  }
 
   let model;
   try {
@@ -80,7 +75,7 @@ export async function POST(_req: Request, { params }: Params) {
       ...topicContextStats(id),
       compacted: false,
       reason: '历史还太短（最近几轮之外的内容不够压）',
-      runtime: 'api',
+      runtime: agent?.runtime ?? 'api',
     });
   }
 
@@ -88,7 +83,7 @@ export async function POST(_req: Request, { params }: Params) {
     ...topicContextStats(id),
     compacted: true,
     compressedCount: result.compressedCount,
-    runtime: 'api',
+    runtime: agent?.runtime ?? 'api',
   });
 }
 
@@ -96,22 +91,15 @@ export async function POST(_req: Request, { params }: Params) {
  * DELETE —— 撤销最近一次压缩（删掉最新那条摘要）。
  *
  * 只删摘要、不动消息：水位线回退到上一条摘要（或没有），下次请求会把这段历史重新发给模型。
- * 与 POST 同样拒绝 CLI 会话——那条链路用 pi 自己的 compaction。
  */
 export async function DELETE(_req: Request, { params }: Params) {
   const { id } = await params;
   const agent = agentOf(id);
-  if (agent?.runtime === 'cli') {
-    return Response.json(
-      { error: '这个会话用的是外部 CLI Agent，它有自己的上下文压缩，这里不处理。' },
-      { status: 400 },
-    );
-  }
 
   const removed = deleteLatestSummary(id);
   return Response.json({
     ...topicContextStats(id),
     removed,
-    runtime: 'api',
+    runtime: agent?.runtime ?? 'api',
   });
 }

@@ -40,12 +40,11 @@ function formatTokens(value: number): string {
  * 为什么要露出来：压缩是"调模型前"自动发生的，用户看不见就会以为 AI 突然失忆。
  * 这里给出三件事——现在占多少、什么时候会压、以及"现在就压"的按钮。
  *
- * 外部 CLI（pi 等）的会话不显示：那条链路用 pi 自己的 compaction。
+ * 内置模型与外部 CLI（pi 等）都适用：CLI 会话也走我们自己的压缩（事实来源是 DB）。
  */
 export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps) => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [status, setStatus] = useState<'error' | 'loading' | 'ready'>('loading');
-  const [runtime, setRuntime] = useState<string>('api');
   const [open, setOpen] = useState(false);
   const [compacting, setCompacting] = useState(false);
 
@@ -58,9 +57,8 @@ export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps
     try {
       const res = await fetch(`/api/topics/${topicId}/context`);
       if (!res.ok) throw new Error(String(res.status));
-      const data = (await res.json()) as Stats & { runtime?: string };
+      const data = (await res.json()) as Stats;
       setStats(data);
-      setRuntime(data.runtime ?? 'api');
       setStatus('ready');
     } catch {
       setStatus('error');
@@ -121,7 +119,7 @@ export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps
     }
   };
 
-  if (!topicId || (status === 'ready' && runtime !== 'api')) return null;
+  if (!topicId) return null;
 
   const ratio = stats && stats.threshold > 0 ? stats.estimatedTokens / stats.threshold : 0;
   const barColor =

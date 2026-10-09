@@ -184,6 +184,37 @@ export async function POST(req: Request) {
       .map((message) => ({ content: textOf(message), role: message.role as 'assistant' | 'user' }))
       .filter((item) => item.content);
 
+    // 外部 CLI（pi 等）也走我们自己的压缩：学 pi 的 compaction 方法（结构化 checkpoint +
+    // 滚动更新），但事实来源仍是我们的 DB——这样删除/重新生成消息不会和 pi 的记忆打架。
+    // 超阈值就把旧历史压成摘要拼进 CLI prompt；失败一律降级成"照旧全量发"。
+    let cliHistory = history;
+    let cliSummary: string | null = null;
+    if (topicId) {
+      try {
+        const prepared = await prepareContext({
+          messages: uiMessages,
+          model: createChatModel(),
+          topicId,
+        });
+        if (prepared.error) {
+          console.error('[chat] CLI 上下文压缩失败，本次按原样发送：', prepared.error);
+        }
+        if (prepared.compacted) {
+          console.info(
+            `[chat] CLI 压缩上下文：${prepared.compressedCount} 条 → 摘要（估算 ${prepared.estimatedTokens} / 阈值 ${prepared.threshold}）`,
+          );
+        }
+        const preparedLastUser = [...prepared.messages].reverse().find((m) => m.role === 'user');
+        cliHistory = prepared.messages
+          .filter((m) => m.id !== preparedLastUser?.id)
+          .map((m) => ({ content: textOf(m), role: m.role as 'assistant' | 'user' }))
+          .filter((item) => item.content);
+        cliSummary = prepared.summary;
+      } catch {
+        // 摘要模型没配置（MissingLlmConfigError）等：不压缩，照旧把历史全量发给 CLI
+      }
+    }
+
     // pi 的工具开关：会话里的开关 → `--tools +x` / `--exclude-tools y` 注入到命令
     const piFlags = isPiCommand(command) ? buildPiToolFlags(toolSettings) : [];
     const effectiveCommand = piFlags.length > 0 ? `${command} ${piFlags.join(' ')}` : command;
@@ -254,10 +285,11 @@ export async function POST(req: Request) {
 
         try {
           const promptText = buildCliPrompt({
-            history,
+            history: cliHistory,
             question,
             // 模板里有 {{systemPrompt}} 就交给 CLI，没有则并进 prompt
             systemPrompt: effectiveCommand.includes('{{systemPrompt}}') ? null : agent.systemPrompt,
+            summary: cliSummary,
           });
 
           // 文本类附件：内容并进 prompt（CLI 收不到 file part，只有文本这一条路）
