@@ -67,8 +67,32 @@ Hearth 的附件链路（2026-10-08 起，A 期=图片，B 期=文本，C 期=Of
 顺带：`.env.example` 里已写好 `LLM_VISION`，换纯文本模型时改这一个开关即可
 （不需要 LobeChat 那套 model-bank 能力标注）。
 
-- **只有当前轮的图片进模型**（历史里的附件只留文字）：每轮重发要把文件读成 base64，
-  图片 token 也会让本地模型上下文迅速膨胀。想看旧图需要用户重发（LobeHub 是整段历史都带）。
+## 上传状态机（抄 LobeChat 的 `FileUploadStatus`，2026-10-09）
+
+只留三态（`uploading` / `done` / `error`），但把表现做全：
+
+- `features/chat/useAttachments.ts`：条目**立刻上屏**（图片先给 `blob:` 本地预览，
+  `URL.createObjectURL`，成功后换成服务器 URL 并 `revokeObjectURL` 回收）；
+- 进度用 **XHR**（`fetch` 没有上传进度事件）；最多 3 个并发，避免大文件互抢带宽；
+- `error` 态条目留在列表里（红框 + 原因 + 重试按钮），`File` 挂在条目上供重试；
+- **上传中禁用发送**（`uploadingCount > 0` → composer disabled），抄 LobeChat 的 `isUploadingFiles`；
+- 条目用稳定 `id`（`att-N`）做 React key 与更新定位——**别拿 blob URL 或文件名当 key**（会变、会撞）。
+
+实测：正常路径 0%→100%→自动换服务器 URL、发送按钮恢复；`.tiff`（客户端放行、服务端 415）
+→ 红框"上传失败" + 重试按钮，点重试确实又发了一次 POST。
+
+## 上传前图片压缩（抄 LobeChat 的 `compressImage`）
+
+`features/chat/imageCompress.ts`：最长边 >1920 就缩放、体积 >3MB 就压；
+PNG → webp（截图文字更清晰），其余 → jpeg(0.85)；压完更大就用原图，任何失败都原样返回。
+实测 2300×2300 噪声 PNG（4.0MB）→ 1920×1920 webp 0.53MB（省 86.6%）。
+不做压缩的话，手机 6MB 照片会被 5MB 上限直接拒掉。
+
+## 有意的取舍
+
+- **只有当前轮的附件内容进模型**（历史里的附件只留引用）：每轮重发要把文件读成 base64，
+  图片 token 也会让本地模型上下文迅速膨胀。想看旧图需要用户重发。
+  （LobeChat 是整段历史都带，他们的注释自己承认代价：*"the whole topic keeps failing afterwards"*）
 - **按内容哈希命名 + 覆盖写**：同一张图重复上传只占一份，`public/uploads` 天然去重；
   中文/空格不参与 URL（原名存消息片段）。
 - **落 `public/uploads` 而不是 DB**：符合 image-generation skill 的约定（DB 只存路径）；
@@ -76,13 +100,11 @@ Hearth 的附件链路（2026-10-08 起，A 期=图片，B 期=文本，C 期=Of
 
 ## 限制常量（都在 `lib/files/constants.ts`）
 
-- 图片 4 种 mime；单文件 5MB
-- **文本类**：`TEXT_MEDIA_TYPES` + `TEXT_EXTENSIONS`（含代码文件扩展名），单独 256KB 上限，
-  进 prompt 时每文件最多 20k 字符（超出截断并标注）
-- 单条消息 6 个附件；`FILE_ACCEPT` 是给 `<input accept>` 用的串
+- 图片 4 种 mime、单文件 5MB（超了先压缩再判）
+- 文本类：`TEXT_MEDIA_TYPES` + `TEXT_EXTENSIONS`（含代码文件扩展名），1MB 上限；
+  进模型时 ≤50k 字内联全文，超了只给 4k 预览（见上面的可靠性契约）
+- 文档 PDF ≤10MB；单条消息 6 个附件；`FILE_ACCEPT` 是给 `<input accept>` 用的串
 扩展格式时**只改 constants.ts + uploads.ts 的校验/扩展名映射**，前端会自动跟随。
-C 期（Office/PDF）要在这里加类型白名单，并在 `attachments.ts` 里把"抽文本"接到
-`currentTurnTextBlocks` 那条路上。
 
 ## Office / PDF（C 期）
 

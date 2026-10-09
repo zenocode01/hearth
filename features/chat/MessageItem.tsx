@@ -36,7 +36,6 @@ export const MessageItem = memo(({ message, startedAt, busy, onAction }: Message
     .map((part) => ({
       filename: part.filename ?? '图片',
       mediaType: part.mediaType,
-      size: 0,
       url: part.url,
     }));
   // 历史消息从 metadata 里取已持久化的思考耗时

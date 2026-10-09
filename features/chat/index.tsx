@@ -314,12 +314,15 @@ export function ChatView() {
     requestStartedAtRef.current = Date.now();
     streamTopicIdRef.current = topicId;
     // 附件随消息一起发：消息里落 file 片段（URL 形态），发模型前才转 base64/image part
-    const files = attachments.items.map((item) => ({
-      filename: item.filename,
-      mediaType: item.mediaType,
-      type: 'file' as const,
-      url: item.url,
-    }));
+    // 只带 status==='done' 且有 url 的（上传中/失败的先不发，发送按钮本来就禁用）
+    const files = attachments.items
+      .filter((item) => item.status === 'done' && item.url)
+      .map((item) => ({
+        filename: item.filename,
+        mediaType: item.mediaType,
+        type: 'file' as const,
+        url: item.url as string,
+      }));
     attachments.clear();
     void sendMessage(
       { files, text },
@@ -672,12 +675,12 @@ export function ChatView() {
             />
           }
           attachmentSlot={
-            attachments.items.length > 0 || attachments.uploading ? (
+            attachments.items.length > 0 || attachments.uploadingCount > 0 ? (
               <>
                 <AttachmentPreview
                   items={attachments.items}
-                  uploading={attachments.uploading}
                   onRemove={attachments.remove}
+                  onRetry={attachments.retry}
                 />
                 {attachments.error && (
                   <Text style={{ color: 'var(--ant-color-error, #ff4d4f)', fontSize: 12 }} type="secondary">
@@ -688,7 +691,7 @@ export function ChatView() {
             ) : null
           }
           busy={busy}
-          disabled={hasPendingQuestion}
+          disabled={hasPendingQuestion || attachments.uploadingCount > 0}
           onFiles={(files) => void attachments.addFiles(files)}
           toolPicker={
             <ToolPicker
