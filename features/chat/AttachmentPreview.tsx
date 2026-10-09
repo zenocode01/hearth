@@ -139,9 +139,10 @@ export const AttachmentPreview = memo(
                   )}
                 </div>
 
-                {(isImage ? true : Boolean(item.size)) && (
+                {/* 体积/状态说明：图片缩略图本身已经很明显了，只给非图片显示文件名与体积 */}
+                {!isImage && (
                   <span style={{ fontSize: 10.5, opacity: 0.6 }}>
-                    {failed ? '上传失败' : isImage ? item.filename.slice(0, 18) : formatSize(item.size ?? 0)}
+                    {failed ? '上传失败' : formatSize(item.size ?? 0)}
                   </span>
                 )}
                 {failed && item.error && (
@@ -176,8 +177,8 @@ export const AttachmentPreview = memo(
                   </button>
                 )}
 
-                {/* 删除 */}
-                {onRemove && !failed && (
+                {/* 删除（失败条目也能删——不能只让用户一直重试） */}
+                {onRemove && (
                   <button
                     aria-label={`移除 ${item.filename}`}
                     onClick={() => onRemove(keyOf(item))}

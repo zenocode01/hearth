@@ -360,7 +360,19 @@ export function ChatView() {
           break;
         }
         case 'restore': {
+          // 附件一起放回（URL 直接复用，不重传——对应 LobeChat 的 skipRemoveFile 思路）
+          const files = message.parts
+            .filter((part): part is Extract<UIMessage['parts'][number], { type: 'file' }> => part.type === 'file')
+            .map((part) => ({
+              filename: part.filename ?? '附件',
+              mediaType: part.mediaType,
+              url: part.url,
+            }));
+          if (files.length > 0) attachments.addExisting(files);
           setDraft(text);
+          if (files.length > 0) {
+            toast.success(`已放回输入框（附件 ${files.length} 个，无需重新上传）`);
+          }
           requestAnimationFrame(() =>
             document.querySelector<HTMLTextAreaElement>('textarea')?.focus(),
           );
@@ -412,7 +424,7 @@ export function ChatView() {
         }
       }
     },
-    [activeTopicId, refreshTopics, regenerate, setMessages],
+    [activeTopicId, attachments, refreshTopics, regenerate, setMessages],
   );
 
   const handleRetry = useCallback(async () => {
