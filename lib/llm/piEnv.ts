@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -68,6 +68,46 @@ export function looksLikePiCommand(file: string): boolean {
   return base === 'pi';
 }
 
+/**
+ * 项目扩展的**源码目录**（进 git）：`F:\zeno\hearth\.pi\extensions/*.ts`。
+ */
+export const PROJECT_EXTENSIONS_DIR = path.join(process.cwd(), '.pi', 'extensions');
+
+let extensionsSynced = false;
+
+/**
+ * 把项目扩展源码同步到 agentDir 的 `extensions/` 下。
+ *
+ * ## 为什么是"复制"而不是直接放项目级 `.pi/extensions/`
+ *
+ * pi 加载**项目级**配置（extensions / settings.json / skills / mcp …）需要先在
+ * `agentDir/trust.json` 里信任该目录，否则静默跳过：
+ * `TRUST_REQUIRING_PROJECT_CONFIG_RESOURCES = ['settings.json','mcp.json','extensions',…]`
+ * + `ProjectTrustStore.findNearestTrustEntry()`。
+ * 而 agentDir 下（用户级）的扩展**不需要任何信任**，直接加载。
+ *
+ * 所以：源码留在 `.pi/extensions/`（进 git、可 review），运行时复制到
+ * `agentDir/extensions/`。每进程只同步一次（dev 热重载会重跑，改了源码刷新即生效）。
+ *
+ * 顺带解释为什么不能靠项目 cwd：pi 报告的 cwd 是 `F:/zeno`（不是 `F:/zeno/hearth`），
+ * 项目级目录会落到仓库外面去，不受版本管理。
+ */
+export function syncProjectExtensions(): string[] {
+  if (!PI_ISOLATED || extensionsSynced) return [];
+  extensionsSynced = true;
+  if (!existsSync(PROJECT_EXTENSIONS_DIR)) return [];
+
+  const dest = path.join(PI_AGENT_DIR, 'extensions');
+  try {
+    mkdirSync(dest, { recursive: true });
+    cpSync(PROJECT_EXTENSIONS_DIR, dest, { force: true, recursive: true });
+    return readdirSync(dest).filter((name) => name.endsWith('.ts'));
+  } catch {
+    // 同步失败不该拖垮对话——pi 只是少加载几个扩展而已
+    return [];
+  }
+}
+
 export interface PiRuntimeCheck {
   /** 有问题时的中文说明，可以直接给用户看 */
   error?: string;
@@ -83,6 +123,9 @@ export interface PiRuntimeCheck {
  */
 export function checkPiRuntime(): PiRuntimeCheck {
   if (!PI_ISOLATED) return { missing: [], ok: true };
+
+  // 顺带把项目扩展同步进 agentDir（每进程一次；改了 .pi/extensions/*.ts 后 dev 刷新即生效）
+  syncProjectExtensions();
 
   const missing: string[] = [];
   if (!existsSync(path.join(PI_AGENT_DIR, 'models.json'))) missing.push('models.json');

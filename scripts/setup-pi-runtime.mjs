@@ -21,7 +21,7 @@
  * 安全：.pi-runtime/ 里含 API key，必须保持在 .gitignore 里（仓库已配）。
  */
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -30,17 +30,17 @@ const runtimeDir = process.env.HEARTH_PI_RUNTIME_DIR ?? path.join(repoRoot, '.pi
 const agentDir = process.env.HEARTH_PI_AGENT_DIR ?? path.join(runtimeDir, 'agent');
 const sessionDir = process.env.HEARTH_PI_SESSION_DIR ?? path.join(runtimeDir, 'sessions');
 
+/** 项目扩展源码目录（进 git） */
+const projectExtDir = path.join(repoRoot, '.pi', 'extensions');
+const destExtDir = path.join(agentDir, 'extensions');
+
 const globalAgentDir = path.join(os.homedir(), '.pi', 'agent');
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
-const withExtensions = args.includes('--with-extensions');
-
-/** 值得复制到项目环境的全局扩展（其余的与本项目无关：git-status/todo/llm-metrics…） */
-const USEFUL_EXTENSIONS = ['chinese-locale.ts', 'question.ts', 'compaction-no-thinking.ts'];
 
 const log = (msg) => console.log(msg);
-const warn = (msg) => console.warn(msg);
+const warn = (msg) => console.log(msg);
 
 if (!existsSync(globalAgentDir)) {
   warn(`找不到全局 pi 配置目录：${globalAgentDir}`);
@@ -98,28 +98,18 @@ if (existsSync(destSettings) && !force) {
   log('  （故意不带 packages/extensions：那正是慢的根源）');
 }
 
-// 3) 可选：复制你可能想要的扩展
-if (withExtensions) {
-  const srcExt = path.join(globalAgentDir, 'extensions');
-  const destExt = path.join(agentDir, 'extensions');
-  for (const name of USEFUL_EXTENSIONS) {
-    const src = path.join(srcExt, name);
-    if (!existsSync(src)) {
-      warn(`跳过 ${name}（全局没有）`);
-      continue;
-    }
-    mkdirSync(destExt, { recursive: true });
-    if (existsSync(path.join(destExt, name)) && !force) {
-      log(`· extensions/${name} 已存在，跳过`);
-      continue;
-    }
-    copyFileSync(src, path.join(destExt, name));
-    log(`✓ extensions/${name}`);
-  }
+// 3) 项目扩展：源码在 .pi/extensions/（进 git），复制到 agentDir/extensions/（用户级，不需要 trust）
+if (existsSync(projectExtDir)) {
+  mkdirSync(destExtDir, { recursive: true });
+  cpSync(projectExtDir, destExtDir, { force: true, recursive: true });
+  const names = readdirSync(destExtDir).filter((f) => f.endsWith('.ts'));
+  log(`✓ extensions：${names.join(', ') || '（无 .ts）'} ← .pi/extensions/`);
   warn(
-    '注意：question.ts / compaction-no-thinking.ts 依赖全局的 pi 工具链；' +
-      '拷进来若报依赖错误，把该扩展挪到项目的 .pi/extensions/ 下由 pi 自己解析。',
+    '  为什么要复制：pi 加载项目级配置需要 trust.json 授权，而 agentDir 下的扩展直接生效。' +
+      '改了 .pi/extensions/*.ts 后重启 dev server 即可（无需重跑 setup）。',
   );
+} else {
+  warn(`项目扩展目录不存在：${projectExtDir}`);
 }
 
 log('');
