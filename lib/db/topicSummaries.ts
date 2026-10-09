@@ -80,3 +80,16 @@ export function deleteSummariesAfter(topicId: string, messageId: string): number
     .run();
   return rows.length;
 }
+
+/**
+ * 撤销最近一次压缩：删掉最新那条摘要，水位线自动回退到上一条（或没有）。
+ * 返回是否删掉了（没有摘要时为 false）。
+ *
+ * 语义上等价于"把这次压缩退回"——下一次请求会把这段历史重新发给模型（可能再次被压）。
+ */
+export function deleteLatestSummary(topicId: string): boolean {
+  const latest = getLatestSummary(topicId);
+  if (!latest) return false;
+  getDb().delete(topicSummaries).where(eq(topicSummaries.id, latest.id)).run();
+  return true;
+}

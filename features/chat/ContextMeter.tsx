@@ -98,6 +98,29 @@ export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps
     }
   };
 
+  /** 撤销最近一次压缩：删掉最新摘要，水位线回退，旧历史下次会重新发给模型。 */
+  const undo = async () => {
+    if (!topicId || compacting) return;
+    setCompacting(true);
+    try {
+      const res = await fetch(`/api/topics/${topicId}/context`, { method: 'DELETE' });
+      const data = (await res.json()) as Stats & { error?: string; removed?: boolean };
+      if (!res.ok) {
+        toast.error(data.error ?? '撤销失败，请稍后重试');
+      } else if (data.removed) {
+        toast.success('已撤销最近一次压缩');
+      } else {
+        toast.info('没有可撤销的压缩记录');
+      }
+      setStats(data);
+      setStatus('ready');
+    } catch {
+      toast.error('撤销请求失败，请检查网络');
+    } finally {
+      setCompacting(false);
+    }
+  };
+
   if (!topicId || (status === 'ready' && runtime !== 'api')) return null;
 
   const ratio = stats && stats.threshold > 0 ? stats.estimatedTokens / stats.threshold : 0;
@@ -190,9 +213,21 @@ export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps
                 </Text>
               )}
 
-              <Button loading={compacting} onClick={() => void compact()} size="small">
-                立即压缩
-              </Button>
+              <Flexbox gap={6} horizontal>
+                <Button loading={compacting} onClick={() => void compact()} size="small">
+                  立即压缩
+                </Button>
+                {stats.summaryCount > 0 && (
+                  <Button
+                    disabled={compacting}
+                    onClick={() => void undo()}
+                    size="small"
+                    type="text"
+                  >
+                    撤销最近一次
+                  </Button>
+                )}
+              </Flexbox>
             </>
           )}
         </div>
