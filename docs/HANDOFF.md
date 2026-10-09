@@ -34,7 +34,7 @@
 | 内置工具调用 | `3b4802c` | `lib/llm/tools.ts`（计算器/当前时间/抓网页）+ `stopWhen` 多步 + 工具卡片 + 片段落库 `messages.parts` |
 | 工具列表与开关 | `078c364` `631e72d` `321f92d` `27b783b` | 输入框 ActionBar 入口 + Popover；pi 运行时显示**pi 的工具**（内置 8 + 扩展，实时读 settings/会话）；开关随会话保存并注入 `--tools +x` / `--exclude-tools y` |
 | 工具开关修复 | `9b70171` | pi 默认关的工具（powershell/grep/find/ls）开关点不动：归一成"无覆盖"后 pi 的默认"关"又赢回来 → 归一时只丢"本来就开着"的 auto |
-| 图片附件 L2-9 | *（本次）* | `lib/files/`（uploads 服务 + **客户端安全**常量）→ `POST /api/files`（sha1 命名落 `public/uploads`，DB 只存引用）→ `useAttachments` + `AttachmentPreview`（选文件/拖拽/粘贴、缩略图+自写灯箱）→ `sendMessage({ files })` → 路由转模型 `file` part（内置模型）/ `prompt.images`（pi）；`StoredPart` 加 file 变体、**用户消息也落 parts**（否则刷新丢图）；踩坑与取舍见 `.agents/skills/attachments-multimodal` |
+| 图片附件 L2-9 | `ab897c3` `0fb5e2f` *（+C 期本次）* | `lib/files/`（uploads 服务 + **客户端安全**常量 + Office/PDF 抽文本）→ `POST /api/files`（sha1 命名落 `public/uploads`，DB 只存引用）→ `useAttachments` + `AttachmentPreview`（选文件/拖拽/粘贴、缩略图+自写灯箱）→ `sendMessage({ files })` → 路由转模型 `file` part（内置模型）/ `prompt.images`（pi）/ 文本与文档抽成 `<file name>` 块；`StoredPart` 加 file 变体、**用户消息也落 parts**（否则刷新丢图）；依赖：`fflate` + `pdfjs-dist`；踩坑与取舍见 `.agents/skills/attachments-multimodal` |
 | pi 工具卡片 | `515d474` | `toolcall_end` / `role=toolResult` → UI 工具片段；刷新后卡片保留 |
 | todo UI | `a1246fe` | 工具卡片渲染 ✓/○ 清单 + 输入框上方**任务清单面板**（清单在工具结果 `details` 里，随消息持久化） |
 | question UI | `36f0d1e` `bedbdf9` | **RPC 模式**运行器 + 对话协议 + 等待回答的注册表/接口 + **输入框上方的提问栏**（pending 时内联不渲染、输入框禁用） |
@@ -104,11 +104,12 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
   - "全部同意"只在全部 `method === 'confirm'` 时出现，而 question 工具走 `select` → **该路径没实测过**（需要一个会发 confirm 对话的场景）；
   - **僵尸标记**：run 中途被杀（旧 bug/直接杀进程）后，DB 里留在 `input-available` 的提问片段刷新后仍渲染提问栏，提交回 404（"回答提交失败"）——旧测试会话删掉即可，要不要做"按注册表过滤标记"待定；
   - **刷新页面会杀挂起的 pi**（fetch 断 → `req.signal` → kill），注册表条目留到有人回答才自清；设计上要"断流重连"才能根治（大改，先记着）。
-- **附件已做图片 + 纯文本**（L2-9 A/B 期，2026-10-09）：图片走多模态（内置模型 `file` part / pi `prompt.images`），
-  文本类（txt/md/json/csv/**代码文件**）转成 `<file name>` 文本块拼进消息（内置模型）或并进 prompt（CLI）。
-  **Office/PDF 还没做**（C 期，见 §8）。取舍与坑见 `.agents/skills/attachments-multimodal`：
+- **附件已做图片 + 文本 + Office/PDF**（L2-9 A/B/C 期，2026-10-09）：图片走多模态（内置模型 `file` part / pi `prompt.images`），
+  文本类与 docx/xlsx/pptx/pdf 抽成 `<file name>` 文本块（内置模型拼进消息、CLI 并进 prompt）。
+  **不支持**：旧版 `.doc/.xls/.ppt`（OLE 二进制，上传即拒并提示另存）、**扫描版 PDF**（没有文字层，抽出来是空）。
+  取舍与坑见 `.agents/skills/attachments-multimodal`：
   - **只有当前轮的附件内容进模型**（历史里的附件只留引用）——看旧图/重读旧文件要用户重发；
-  - 文本文件进 prompt 每文件截断到 20k 字符；上限 256KB；
+  - 文本文件进 prompt 每文件截断到 20k 字符；文本 256KB / 图片 5MB / 文档 PDF 10MB；单条消息 6 个附件；
   - `public/uploads/` **没有清理机制**（同内容 sha1 去重，但删除会话不会删文件）；
   - **非 RPC 的外部 CLI**（json 模式的 opencode 等）传不了图，图片附件会被静默忽略（文本仍然并进 prompt）。
 - **pi 工具开关**：`grep` 做过行为验证；`powershell/ls/find` 机制相同但未逐一实测。
@@ -120,9 +121,6 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
 
 1. **MCP 接入（L2-12）**：把 MCP server 的工具转成 `dynamicTool`，UI 复用 ToolCard；参考 `refs/lobe-chat/packages/heterogeneous-agents/src/mcp`。
 2. **个人记忆（L2-13）**：`user_memory` 表 + "我的记忆"页 + 对话前拼进提示词。
-3. **附件 C 期（Office/PDF）**：用户已批 `fflate` + `pdfjs-dist`（`npm i` 后要重启 dev server）；
-   .docx/.xlsx/.pptx 走 zip+xml 自己抽文本，PDF 用 pdfjs-dist；**旧格式 .doc/.ppt/.xls 明确提示不支持**
-   （本机无 LibreOffice/antiword，纯 JS 也做不了 OLE 二进制）。接入点：`lib/files/constants.ts` 加白名单 +
-   `lib/llm/attachments.ts` 把抽文本接到 `currentTurnTextBlocks`。
+3. **附件收尾**：扫描版 PDF 走 OCR（要装外部工具）、`public/uploads` 的清理策略（删会话时删文件？）、旧版 Office 若真要支持得装 LibreOffice。
 
 > 工作节奏见 `vibe-coding-discipline` skill：**小步**（一次一个小功能）、随时能跑、验收后立刻 commit、约定变了先改 AGENTS.md/skill。

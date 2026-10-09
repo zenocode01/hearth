@@ -40,6 +40,25 @@ export const TEXT_EXTENSIONS = [
   'gradle', 'properties', 'tex', 'r',
 ];
 
+/** Office / PDF（C 期）：走 zip+xml 与 pdfjs 抽文本 */
+export const OFFICE_PDF_MEDIA_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.ms-excel',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+] as const;
+
+export const OFFICE_PDF_EXTENSIONS = ['pdf', 'docx', 'xlsx', 'pptx'];
+
+/** 旧版 OLE 二进制格式：纯 JS 抽不出文本（本机也没有 LibreOffice/antiword）→ 明确提示不支持 */
+export const LEGACY_OFFICE_EXTENSIONS = ['doc', 'xls', 'ppt'];
+
+/** Office/PDF 的体积上限（比图片/文本宽松，但别把内存吃满） */
+export const MAX_OFFICE_FILE_BYTES = 10 * 1024 * 1024;
+
 /** 单个文件体积上限 5MB */
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
@@ -64,8 +83,12 @@ const IMAGE_ACCEPT_LIST = [
   '.gif',
 ];
 
-/** 浏览器 <input accept>：图片 mime/扩展名 + 常见文本扩展名 */
-export const FILE_ACCEPT = [...IMAGE_ACCEPT_LIST, ...TEXT_EXTENSIONS.map((ext) => `.${ext}`)].join(',');
+/** 浏览器 <input accept>：图片 + 文本 + Office/PDF（只列我们真能抽文本的：docx/xlsx/pptx/pdf） */
+export const FILE_ACCEPT = [
+  ...IMAGE_ACCEPT_LIST,
+  ...TEXT_EXTENSIONS.map((ext) => `.${ext}`),
+  ...OFFICE_PDF_EXTENSIONS.map((ext) => `.${ext}`),
+].join(',');
 
 /** 兼容旧名：只选图片时用 */
 export const IMAGE_ACCEPT = IMAGE_ACCEPT_LIST.join(',');
@@ -81,4 +104,19 @@ export function isTextFile(input: { filename?: string; mediaType: string }): boo
   if ((TEXT_MEDIA_TYPES as readonly string[]).includes(input.mediaType)) return true;
   const ext = extOf(input.filename ?? '');
   return ext !== '' && TEXT_EXTENSIONS.includes(ext);
+}
+
+/** Office/PDF（docx/xlsx/pptx/pdf）——我们能抽文本的那几种 */
+export function isOfficeOrPdf(input: { filename?: string; mediaType: string }): boolean {
+  if ((OFFICE_PDF_MEDIA_TYPES as readonly string[]).includes(input.mediaType)) {
+    // 旧版 OLE（doc/xls/ppt）虽然 mime 在白名单里，但抽不出文本 → 不算支持
+    return !LEGACY_OFFICE_EXTENSIONS.includes(extOf(input.filename ?? ''));
+  }
+  return OFFICE_PDF_EXTENSIONS.includes(extOf(input.filename ?? ''));
+}
+
+/** 旧版 Office 二进制格式（提示"请另存为 docx/pdf"用） */
+export function isLegacyOffice(input: { filename?: string; mediaType: string }): boolean {
+  const ext = extOf(input.filename ?? '');
+  return LEGACY_OFFICE_EXTENSIONS.includes(ext);
 }

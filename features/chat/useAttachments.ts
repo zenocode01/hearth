@@ -3,9 +3,12 @@
 import { useCallback, useRef, useState } from 'react';
 
 import {
+  isLegacyOffice,
+  isOfficeOrPdf,
   isTextFile,
   MAX_FILES_PER_MESSAGE,
   MAX_FILE_BYTES,
+  MAX_OFFICE_FILE_BYTES,
   MAX_TEXT_FILE_BYTES,
 } from '@/lib/files/constants';
 
@@ -68,15 +71,18 @@ export function useAttachments() {
         }
         const isImage = file.type.startsWith('image/');
         const asText = !isImage && isTextFile({ filename: file.name, mediaType: file.type });
-        if (!isImage && !asText) {
-          setError(
-            `${file.name}：目前只支持图片与文本文件（txt/md/json/csv/代码文件等），Office/PDF 还没做`,
-          );
+        const asDocument = !isImage && !asText && isOfficeOrPdf({ filename: file.name, mediaType: file.type });
+        if (!isImage && !asText && !asDocument) {
+          if (isLegacyOffice({ filename: file.name, mediaType: file.type })) {
+            setError(`${file.name}：旧版 Office（.doc/.xls/.ppt）读不了，请另存为 .docx/.xlsx/.pptx 或 PDF`);
+          } else {
+            setError(`${file.name}：暂不支持这种文件（支持图片 / 文本 / docx / xlsx / pptx / pdf）`);
+          }
           continue;
         }
-        const limit = asText ? MAX_TEXT_FILE_BYTES : MAX_FILE_BYTES;
+        const limit = asText ? MAX_TEXT_FILE_BYTES : asDocument ? MAX_OFFICE_FILE_BYTES : MAX_FILE_BYTES;
         if (file.size > limit) {
-          setError(`${file.name} 太大（上限 ${Math.round(limit / 1024)}KB）`);
+          setError(`${file.name} 太大（上限 ${Math.round(limit / 1024 / 1024)}MB）`);
           continue;
         }
 

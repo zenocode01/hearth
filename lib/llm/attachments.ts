@@ -1,6 +1,12 @@
 import { convertToModelMessages, type ModelMessage, type UIMessage } from 'ai';
 
-import { MAX_TEXT_CHARS_PER_FILE } from '@/lib/files/constants';
+import {
+  extOf,
+  isOfficeOrPdf,
+  isTextFile,
+  MAX_TEXT_CHARS_PER_FILE,
+} from '@/lib/files/constants';
+import { extractDocumentText } from '@/lib/files/office';
 import { readUploadAsDataUrl, readUploadBytes, readUploadText } from '@/lib/files/uploads';
 
 /**
@@ -41,6 +47,8 @@ function otherPartsOf(message: UIMessage) {
  * 为什么转成**文本段**而不是 file part：provider 对 `data.type === 'text'` 的 file part
  * 直接抛错（UnsupportedFunctionalityError）。这个 `<file name>` 包裹沿用 pi 的约定，
  * 模型对"这是附件内容"的辨识度更好。
+ *
+ * 三类来源：纯文本直接读；docx/xlsx/pptx/pdf 抽文本（C 期）；都不行就给一句人话提示。
  */
 export async function currentTurnTextBlocks(messages: UIMessage[]): Promise<string> {
   const lastUserIndex = messages.findLastIndex((message) => message.role === 'user');
@@ -50,13 +58,25 @@ export async function currentTurnTextBlocks(messages: UIMessage[]): Promise<stri
   const blocks: string[] = [];
   for (const file of files) {
     const name = file.filename ?? '附件';
-    const read = await readUploadText(file.url, MAX_TEXT_CHARS_PER_FILE);
-    if (!read) {
-      blocks.push(`<file name="${name}">（读取失败：文件可能已被清理）</file>`);
+    let text: string | null = null;
+
+    if (isTextFile({ filename: file.filename, mediaType: file.mediaType })) {
+      const read = await readUploadText(file.url, MAX_TEXT_CHARS_PER_FILE);
+      if (read) {
+        text = read.truncated ? `${read.text}\n…（内容过长，已截断）` : read.text;
+      }
+    } else if (isOfficeOrPdf({ filename: file.filename, mediaType: file.mediaType })) {
+      const bytes = await readUploadBytes(file.url);
+      if (bytes) text = await extractDocumentText(bytes, extOf(file.filename ?? ''));
+    }
+
+    if (text === null) {
+      blocks.push(
+        `<file name="${name}">（无法提取文本：可能是扫描版 PDF、旧版 Office（.doc/.xls/.ppt）或文件已清理）</file>`,
+      );
       continue;
     }
-    const note = read.truncated ? '\n…（内容过长，已截断）' : '';
-    blocks.push(`<file name="${name}">\n${read.text}${note}\n</file>`);
+    blocks.push(`<file name="${name}">\n${text}\n</file>`);
   }
   return blocks.join('\n\n');
 }

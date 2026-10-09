@@ -62,6 +62,24 @@ Hearth 的附件链路（2026-10-08 起，A 期=图片，B 期=文本，C 期=Of
 C 期（Office/PDF）要在这里加类型白名单，并在 `attachments.ts` 里把"抽文本"接到
 `currentTurnTextBlocks` 那条路上。
 
+## Office / PDF（C 期）
+
+- `.docx/.xlsx/.pptx` = zip + XML：`fflate` 解包后自己抽文本（`lib/files/office.ts`）
+  - docx：`</w:p>`→换行、`<w:tab/>`→制表符，再去标签 + 解实体
+  - pptx：`<a:t>` 取文字，按 `slideN` 排序，每页一段
+  - xlsx：`sharedStrings.xml` + `sheetN.xml`，按单元格引用（A1→列号）排序，制表符分隔
+  - 够用优先：不还原格式/公式/日期
+- `.pdf`：`pdfjs-dist` 的 legacy build 抽文字层
+  - ⚠️ `standardFontDataUrl` 必须是**正斜杠 + 结尾斜杠**（`path.join` 会吃掉结尾斜杠 → "Invalid factory url"）
+  - **扫描件没有文字层** → 抽出来是空，UI 会显示"无法提取文本"
+- **旧版 `.doc/.xls/.ppt`（OLE 二进制）不做**：纯 JS 抽不出，本机也没有 LibreOffice/antiword
+  → 上传时就 415 拒绝，并提示"请另存为 .docx/.xlsx/.pptx 或 PDF"
+- 抽文本统一接在 `currentTurnTextBlocks()`（和纯文本附件同一条路）
+
+自测技巧（不想每次都过 UI）：`npx esbuild lib/files/office.ts --bundle --platform=node
+--format=esm --outfile=<tmp>.mjs --external:pdfjs-dist --external:fflate --external:node:*`
+之后在 node 里用 fflate 造 zip 样本 / 手搓最小 PDF 直接断言抽取结果。
+
 ## pi（CLI）路径怎么传图
 
 pi 的 RPC `prompt` 命令支持 `images: [{ type:'image', mimeType, data:<base64> }]`

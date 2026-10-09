@@ -23,9 +23,11 @@
     "antd": "^6",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.3",
+    "fflate": "^0.8.3",
     "lucide-react": "^0.562.0",
     "motion": "^12",
     "next": "^16",
+    "pdfjs-dist": "^6.4.299",
     "react": "^19",
     "react-dom": "^19"
   },

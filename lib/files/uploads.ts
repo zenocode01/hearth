@@ -4,8 +4,11 @@ import path from 'node:path';
 
 import {
   extOf,
+  isLegacyOffice,
+  isOfficeOrPdf,
   isTextFile,
   MAX_FILE_BYTES,
+  MAX_OFFICE_FILE_BYTES,
   MAX_TEXT_FILE_BYTES,
   UPLOAD_DIR,
 } from './constants';
@@ -94,17 +97,21 @@ export async function saveUpload(input: {
 }): Promise<UploadedFile> {
   const { dataBase64, filename, mediaType } = input;
   const asText = isTextFile({ filename, mediaType });
+  const asDocument = isOfficeOrPdf({ filename, mediaType });
 
-  if (!isSupportedMediaType(mediaType) && !asText) {
+  if (isLegacyOffice({ filename, mediaType })) {
+    throw new UploadError('暂不支持旧版 Office（.doc/.xls/.ppt），请另存为 .docx/.xlsx/.pptx 或 PDF', 415);
+  }
+  if (!isSupportedMediaType(mediaType) && !asText && !asDocument) {
     throw new UploadError(`暂不支持的文件类型：${filename || mediaType || '未知'}`, 415);
   }
 
   const buffer = decodeBase64(dataBase64);
-  // 文本文件要读进 prompt，单独用更小的上限
-  const limit = asText ? MAX_TEXT_FILE_BYTES : MAX_FILE_BYTES;
+  // 文本要进 prompt（更小的上限）；Office/PDF 走抽文本（更宽松）；图片 5MB
+  const limit = asText ? MAX_TEXT_FILE_BYTES : asDocument ? MAX_OFFICE_FILE_BYTES : MAX_FILE_BYTES;
   if (buffer.length > limit) {
     throw new UploadError(
-      `${filename ?? '文件'} 太大（${(buffer.length / 1024).toFixed(0)}KB），上限 ${Math.round(limit / 1024)}KB`,
+      `${filename ?? '文件'} 太大（${(buffer.length / 1024 / 1024).toFixed(1)}MB），上限 ${Math.round(limit / 1024 / 1024)}MB`,
       413,
     );
   }
