@@ -92,6 +92,8 @@ export async function POST(req: Request) {
   const agent = effectiveAgentId
     ? (db.select().from(agents).where(eq(agents.id, effectiveAgentId)).get() ?? null)
     : null;
+  // 思考等级：会话级覆盖（工具栏切换）优先于 Agent 的设置
+  const reasoningEffort = topicRow?.reasoningEffort ?? agent?.reasoningEffort ?? null;
 
   // 工具开关：会话里存的为准（新会话用请求里带的）；没有设置 = 全部自动启用
   const toolSettings =
@@ -288,7 +290,7 @@ export async function POST(req: Request) {
                 },
                 command: effectiveCommand,
                 prompt: finalPrompt,
-                reasoningEffort: agent.reasoningEffort,
+                reasoningEffort,
                 systemPrompt: agent.systemPrompt,
               })
             : runCliAgent({
@@ -346,8 +348,8 @@ export async function POST(req: Request) {
     temperature: agent?.temperature ?? undefined,
     // 思考等级：openai-compatible 的 chat options 认 reasoningEffort（最终发给模型 reasoning_effort）。
     // 空 = 不干预，用模型自己的默认；非法值在 normalizeReasoningEffort 就被丢掉了。
-    ...(agent?.reasoningEffort
-      ? { providerOptions: { 'hearth-llm': { reasoningEffort: agent.reasoningEffort } } }
+    ...(reasoningEffort
+      ? { providerOptions: { 'hearth-llm': { reasoningEffort } } }
       : {}),
     // 内置工具（L2-11）：按会话开关筛选；模型主动调用 → 服务端执行 → 结果回填后继续生成
     tools: Object.keys(chatToolsForTurn).length > 0 ? chatToolsForTurn : undefined,

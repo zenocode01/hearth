@@ -25,7 +25,8 @@ export const agents = sqliteTable('agents', {
    * - api：进 providerOptions.reasoningEffort（openai-compatible 认这个字段）
    * - cli（pi）：spawn 后发一条 `{"type":"set_thinking_level","level":…}` RPC 命令
    *
-   * 差别大到值得单独一列：实测同一请求 high 比 medium 慢 3 倍（36s vs 12s）。
+   * 差别大到值得单独一列：思考 token 是实打实的钱和时间，
+   * 但各档耗时差多少由模型决定（见 lib/llm/reasoning.ts 的实测说明）。
    */
   reasoningEffort: text('reasoning_effort'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
@@ -43,6 +44,12 @@ export const topics = sqliteTable('topics', {
    * 空/未设置 = 全部工具自动启用（与 LobeHub 的"不在列表里 = auto"一致）。
    */
   tools: text('tools'),
+  /**
+   * 会话级思考等级覆盖（off/low/medium/high/xhigh）。
+   * null = 跟随 Agent 的设置；工具栏里切换只改这个，不用动 Agent。
+   * 聊天请求里 topic 的值优先于 agent 的值（见 app/api/chat/route.ts）。
+   */
+  reasoningEffort: text('reasoning_effort'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });

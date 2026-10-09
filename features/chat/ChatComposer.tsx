@@ -13,6 +13,8 @@ interface ChatComposerProps {
   busy: boolean;
   /** 有待回答的提问时禁用输入（避免并发发消息；参考 refs：pending 时输入框不可用） */
   disabled?: boolean;
+  /** 思考等级切换（会话级，覆盖 Agent 设置；放在操作栏工具入口旁） */
+  effortPicker?: ReactNode;
   onChange: (value: string) => void;
   /** 选文件 / 拖拽 / 粘贴进来的文件 */
   onFiles?: (files: FileList | File[]) => void;
@@ -36,6 +38,7 @@ export const ChatComposer = memo(
     onFiles,
     onSend,
     onStop,
+    effortPicker,
     toolPicker,
   }: ChatComposerProps) => {
     const composingRef = useRef(false);
@@ -116,6 +119,7 @@ export const ChatComposer = memo(
         <Flexbox align="center" horizontal justify="space-between">
           <Flexbox align="center" gap={4} horizontal>
             {attachButton}
+            {effortPicker}
             {toolPicker}
           </Flexbox>
           {busy ? (

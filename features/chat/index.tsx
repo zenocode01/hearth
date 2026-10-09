@@ -19,6 +19,7 @@ import { parseToolSettings, type ToolSetting } from '@/lib/tools/settings';
 import { AttachmentPreview } from './AttachmentPreview';
 import { BackBottom } from './BackBottom';
 import { ChatComposer } from './ChatComposer';
+import { EffortPicker } from './EffortPicker';
 import { EmptyState } from './EmptyState';
 import { findPendingQuestions, mergePendingQuestions } from './interventions';
 import { MessageItem } from './MessageItem';
@@ -49,6 +50,8 @@ export function ChatView() {
   const [draft, setDraft] = useState('');
   /** 本会话的工具开关（[] = 全部自动启用） */
   const [toolSettings, setToolSettings] = useState<ToolSetting[]>([]);
+  /** 本会话的思考等级覆盖（'' = 跟随 Agent） */
+  const [topicEffort, setTopicEffort] = useState('');
   /** 手机端：侧栏抽屉是否打开 */
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -168,6 +171,7 @@ export function ChatView() {
     if (topic) {
       setActiveAgentId(topic.agentId ?? null);
       setToolSettings(parseToolSettings(topic.tools) ?? []);
+      setTopicEffort(topic.reasoningEffort ?? '');
     }
   }, [activeTopicId, topics]);
 
@@ -184,6 +188,22 @@ export function ChatView() {
       }
     },
     [activeTopicId],
+  );
+
+  /** 思考等级：已有会话落库（会话级覆盖），新会话先记在本地。 */
+  const handleEffortChange = useCallback(
+    async (next: string) => {
+      setTopicEffort(next);
+      if (activeTopicId) {
+        await fetch(`/api/topics/${activeTopicId}`, {
+          body: JSON.stringify({ reasoningEffort: next || null }),
+          headers: { 'content-type': 'application/json' },
+          method: 'PATCH',
+        });
+        void refreshTopics();
+      }
+    },
+    [activeTopicId, refreshTopics],
   );
 
   /** 切换 Agent：已有会话则落库（换人设立即生效），否则记在本地等建会话时带上。 */
@@ -290,6 +310,7 @@ export function ChatView() {
         const res = await fetch('/api/topics', {
           body: JSON.stringify({
             agentId: activeAgentId ?? undefined,
+            reasoningEffort: topicEffort || undefined,
             title: text.slice(0, 40),
             tools: toolSettings,
           }),
@@ -710,6 +731,13 @@ export function ChatView() {
               agentId={activeAgentId}
               settings={toolSettings}
               onChange={(next) => void handleToolChange(next)}
+            />
+          }
+          effortPicker={
+            <EffortPicker
+              agentId={activeAgentId}
+              onChange={(next) => void handleEffortChange(next)}
+              value={topicEffort}
             />
           }
           value={draft}

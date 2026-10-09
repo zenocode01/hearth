@@ -64,6 +64,13 @@
       "when": 1791531814909,
       "tag": "0008_agent_reasoning_effort",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1791534925845,
+      "tag": "0009_topic_reasoning_effort",
+      "breakpoints": true
     }
   ]
 }
