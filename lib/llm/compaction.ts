@@ -193,7 +193,7 @@ async function summarize(input: {
     .join('\n\n');
 
   const { text } = await generateText({
-    maxOutputTokens: 1_500,
+    maxOutputTokens: 4_096,
     model: input.model,
     prompt,
     system: SUMMARY_SYSTEM,
