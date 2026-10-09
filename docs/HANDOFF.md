@@ -104,11 +104,13 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
   - "全部同意"只在全部 `method === 'confirm'` 时出现，而 question 工具走 `select` → **该路径没实测过**（需要一个会发 confirm 对话的场景）；
   - **僵尸标记**：run 中途被杀（旧 bug/直接杀进程）后，DB 里留在 `input-available` 的提问片段刷新后仍渲染提问栏，提交回 404（"回答提交失败"）——旧测试会话删掉即可，要不要做"按注册表过滤标记"待定；
   - **刷新页面会杀挂起的 pi**（fetch 断 → `req.signal` → kill），注册表条目留到有人回答才自清；设计上要"断流重连"才能根治（大改，先记着）。
-- **附件只做了图片**（L2-9 A 期，2026-10-09）：文本/Office/PDF 还没做（B/C 期，见 §8）。已知取舍与坑见 `.agents/skills/attachments-multimodal`：
-  - **只有当前轮的图片进模型**（历史里的附件只留文字）——看旧图要用户重发；
+- **附件已做图片 + 纯文本**（L2-9 A/B 期，2026-10-09）：图片走多模态（内置模型 `file` part / pi `prompt.images`），
+  文本类（txt/md/json/csv/**代码文件**）转成 `<file name>` 文本块拼进消息（内置模型）或并进 prompt（CLI）。
+  **Office/PDF 还没做**（C 期，见 §8）。取舍与坑见 `.agents/skills/attachments-multimodal`：
+  - **只有当前轮的附件内容进模型**（历史里的附件只留引用）——看旧图/重读旧文件要用户重发；
+  - 文本文件进 prompt 每文件截断到 20k 字符；上限 256KB；
   - `public/uploads/` **没有清理机制**（同内容 sha1 去重，但删除会话不会删文件）；
-  - 只放行 4 种图片格式、单文件 5MB、单条消息 6 个附件（`lib/files/constants.ts` 一处改）；
-  - **非 RPC 的外部 CLI**（json 模式的 opencode 等）传不了图，附件会被静默忽略。
+  - **非 RPC 的外部 CLI**（json 模式的 opencode 等）传不了图，图片附件会被静默忽略（文本仍然并进 prompt）。
 - **pi 工具开关**：`grep` 做过行为验证；`powershell/ls/find` 机制相同但未逐一实测。
 - **pi 出错时界面静默**：已修（2026-10-08）——`parsePiEvent` 现在把 assistant `message_end` 的 `errorMessage` 透出成可读正文（`humanizePiError`：401/403/404/429 各有指引），坏 key 实测显示"⚠️ pi 调用模型失败：…检查 ~/.pi/agent/models.json"。
 - **i18n（L2-8）**：未做。
@@ -118,7 +120,9 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
 
 1. **MCP 接入（L2-12）**：把 MCP server 的工具转成 `dynamicTool`，UI 复用 ToolCard；参考 `refs/lobe-chat/packages/heterogeneous-agents/src/mcp`。
 2. **个人记忆（L2-13）**：`user_memory` 表 + "我的记忆"页 + 对话前拼进提示词。
-3. **附件 B 期（文本文件）**：txt/md/json/csv/log 直接读内容注入（零依赖；注意 provider 对 `data.type='text'` 的 file part 会抛，要转成文本段）。
-4. **附件 C 期（Office/PDF）**：用户已批 `fflate` + `pdfjs-dist`；.docx/.xlsx/.pptx 走 zip+xml 自己抽文本，PDF 用 pdfjs-dist；**旧格式 .doc/.ppt/.xls 明确提示不支持**（本机无 LibreOffice/antiword）。
+3. **附件 C 期（Office/PDF）**：用户已批 `fflate` + `pdfjs-dist`（`npm i` 后要重启 dev server）；
+   .docx/.xlsx/.pptx 走 zip+xml 自己抽文本，PDF 用 pdfjs-dist；**旧格式 .doc/.ppt/.xls 明确提示不支持**
+   （本机无 LibreOffice/antiword，纯 JS 也做不了 OLE 二进制）。接入点：`lib/files/constants.ts` 加白名单 +
+   `lib/llm/attachments.ts` 把抽文本接到 `currentTurnTextBlocks`。
 
 > 工作节奏见 `vibe-coding-discipline` skill：**小步**（一次一个小功能）、随时能跑、验收后立刻 commit、约定变了先改 AGENTS.md/skill。

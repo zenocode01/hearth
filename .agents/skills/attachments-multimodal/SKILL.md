@@ -22,7 +22,7 @@ Hearth 的附件链路（2026-10-08 起，A 期=图片，B 期=文本，C 期=Of
   → 渲染：MessageItem 里 AttachmentPreview（缩略图 + 自写灯箱）
 ```
 
-## 必须知道的四个坑
+## 必须知道的六个坑
 
 1. **服务端代码不能被客户端 import**：`lib/files/uploads.ts` 带 `node:fs`/`node:crypto`，
    客户端组件 import 它 → webpack `UnhandledSchemeError: Reading from "node:fs"` → **整页白屏**。
@@ -30,11 +30,18 @@ Hearth 的附件链路（2026-10-08 起，A 期=图片，B 期=文本，C 期=Of
 2. **`convertToModelMessages` 会 `new URL(part.url)`**：`/uploads/x.png` 是相对路径 → `TypeError: Invalid URL`。
    所以**一律先把 file 片段摘掉**再交给 SDK，图片自己转成模型 part 拼回去（`toModelMessagesWithImages`）。
 3. **别用 `image` part**：AI SDK v7 已废弃（`AISDK_DEP_IMAGE_CONTENT_PART` 警告）。
-   用 `{ type:'file', mediaType:'image/png', filename, data:{ type:'url', url: dataUrl } }`；
+   用 `{ type:'file', mediaType:'image/png', filename, data:{ type:'data', data: Buffer } }`；
    provider（`@ai-sdk/openai-compatible`）按 mediaType 分流成 `image_url`。
-   ⚠️ 但 `data.type === 'text'` 的 file part 会被 provider 直接抛错 → 文本类附件（B 期）要转成**文本段**。
-4. **用户消息也要落 parts**：路由里原本只存 `content`，附件刷新即丢。现在 user 消息也写 `parts`；
+   ⚠️ 两个 data 形态要分清：
+   - `type:'data'`（传字节）→ 正常；
+   - `type:'url'` → SDK 会去**下载**那个 URL，data URL 直接 `AI_DownloadError`（2026-10-09 踩过）。
+4. **文本类附件要转成文本段**（不是 file part）：provider 遇到 `data.type === 'text'` 的 file part
+   会直接抛 `UnsupportedFunctionalityError`。所以 `currentTurnTextBlocks()` 把内容包成
+   `<file name="x.md">…</file>` 拼进最后一条 user 消息（内置模型）或并进 prompt（CLI/pi）。
+5. **用户消息也要落 parts**：路由里原本只存 `content`，附件刷新即丢。现在 user 消息也写 `parts`；
    历史加载对所有角色都用 `deserializeParts` 还原，所以图片刷新后照常显示。
+6. **浏览器给的代码文件 mime 不可靠**（.ts 可能被报成 `video/mp2t`）→ 判定要**扩展名兜底**
+   （`isTextFile()` 看 mime 或扩展名），存盘扩展名也优先用原文件名。
 
 ## 有意的取舍
 
@@ -45,10 +52,15 @@ Hearth 的附件链路（2026-10-08 起，A 期=图片，B 期=文本，C 期=Of
 - **落 `public/uploads` 而不是 DB**：符合 image-generation skill 的约定（DB 只存路径）；
   代价是没有清理机制（自己按需加）。
 
-## 限制常量（A 期：只放行图片）
+## 限制常量（都在 `lib/files/constants.ts`）
 
-`lib/files/constants.ts`：图片 4 种 mime、单文件 5MB、单条消息 6 个附件。
-扩展格式时**只改这里 + `uploads.ts` 的校验/扩展名映射 + `IMAGE_ACCEPT`**，前端会自动跟随。
+- 图片 4 种 mime；单文件 5MB
+- **文本类**：`TEXT_MEDIA_TYPES` + `TEXT_EXTENSIONS`（含代码文件扩展名），单独 256KB 上限，
+  进 prompt 时每文件最多 20k 字符（超出截断并标注）
+- 单条消息 6 个附件；`FILE_ACCEPT` 是给 `<input accept>` 用的串
+扩展格式时**只改 constants.ts + uploads.ts 的校验/扩展名映射**，前端会自动跟随。
+C 期（Office/PDF）要在这里加类型白名单，并在 `attachments.ts` 里把"抽文本"接到
+`currentTurnTextBlocks` 那条路上。
 
 ## pi（CLI）路径怎么传图
 

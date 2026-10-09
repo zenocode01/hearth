@@ -1,6 +1,7 @@
 import { convertToModelMessages, type ModelMessage, type UIMessage } from 'ai';
 
-import { readUploadAsDataUrl, readUploadBytes } from '@/lib/files/uploads';
+import { MAX_TEXT_CHARS_PER_FILE } from '@/lib/files/constants';
+import { readUploadAsDataUrl, readUploadBytes, readUploadText } from '@/lib/files/uploads';
 
 /**
  * UI 消息 → 模型消息（带图片附件）。
@@ -24,6 +25,40 @@ function imagePartsOf(message: UIMessage) {
     (part): part is Extract<UIMessage['parts'][number], { type: 'file' }> =>
       part.type === 'file' && part.mediaType.startsWith('image/'),
   );
+}
+
+/** 取出一条消息里的"非图片"附件（文本类；C 期后还会有 Office/PDF）。 */
+function otherPartsOf(message: UIMessage) {
+  return message.parts.filter(
+    (part): part is Extract<UIMessage['parts'][number], { type: 'file' }> =>
+      part.type === 'file' && !part.mediaType.startsWith('image/'),
+  );
+}
+
+/**
+ * 当前轮的文本类附件 → `<file name="x.md">…</file>` 文本块。
+ *
+ * 为什么转成**文本段**而不是 file part：provider 对 `data.type === 'text'` 的 file part
+ * 直接抛错（UnsupportedFunctionalityError）。这个 `<file name>` 包裹沿用 pi 的约定，
+ * 模型对"这是附件内容"的辨识度更好。
+ */
+export async function currentTurnTextBlocks(messages: UIMessage[]): Promise<string> {
+  const lastUserIndex = messages.findLastIndex((message) => message.role === 'user');
+  if (lastUserIndex < 0) return '';
+  const files = otherPartsOf(messages[lastUserIndex]);
+
+  const blocks: string[] = [];
+  for (const file of files) {
+    const name = file.filename ?? '附件';
+    const read = await readUploadText(file.url, MAX_TEXT_CHARS_PER_FILE);
+    if (!read) {
+      blocks.push(`<file name="${name}">（读取失败：文件可能已被清理）</file>`);
+      continue;
+    }
+    const note = read.truncated ? '\n…（内容过长，已截断）' : '';
+    blocks.push(`<file name="${name}">\n${read.text}${note}\n</file>`);
+  }
+  return blocks.join('\n\n');
 }
 
 /**
@@ -68,21 +103,32 @@ export async function toModelMessagesWithImages(
     const [converted] = await convertToModelMessages([{ ...message, parts } as UIMessage]);
 
     if (!converted) continue;
-    if (!isLastUser || files.length === 0) {
+    if (!isLastUser) {
       out.push(converted);
       continue;
     }
 
-    const images = await Promise.all(files.map((file) => toModelFilePart(file)));
+    // 文本类附件 → `<file name>` 文本块拼在最后一条 user 消息里（图片之前）
+    const textBlocks = await currentTurnTextBlocks(messages);
     const base = converted.content;
-    const content = [
+    const text = [
       ...(typeof base === 'string'
         ? base.trim()
-          ? [{ text: base, type: 'text' as const }]
+          ? [base]
           : []
-        : (base ?? [])),
+        : (base ?? []).map((part) => ('text' in part ? part.text : '')).filter(Boolean)),
+      textBlocks,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const images = await Promise.all(files.map((file) => toModelFilePart(file)));
+    const content = [
+      ...(text.trim() ? [{ text, type: 'text' as const }] : []),
       ...images,
     ];
+    // 既没文本也没图片（理论上不会发生）就别造空消息
+    if (content.length === 0) continue;
     out.push({ ...converted, content } as ModelMessage);
   }
 

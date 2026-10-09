@@ -2,7 +2,12 @@
 
 import { useCallback, useRef, useState } from 'react';
 
-import { IMAGE_MEDIA_TYPES, MAX_FILES_PER_MESSAGE, MAX_FILE_BYTES } from '@/lib/files/constants';
+import {
+  isTextFile,
+  MAX_FILES_PER_MESSAGE,
+  MAX_FILE_BYTES,
+  MAX_TEXT_FILE_BYTES,
+} from '@/lib/files/constants';
 
 /** 一个已上传的附件（URL 形态，和消息里的 file 片段一致） */
 export interface Attachment {
@@ -61,12 +66,17 @@ export function useAttachments() {
           setError(`一次最多 ${MAX_FILES_PER_MESSAGE} 个附件`);
           break;
         }
-        if (!(IMAGE_MEDIA_TYPES as readonly string[]).includes(file.type)) {
-          setError(`${file.name}：目前只支持图片（png / jpg / webp / gif）`);
+        const isImage = file.type.startsWith('image/');
+        const asText = !isImage && isTextFile({ filename: file.name, mediaType: file.type });
+        if (!isImage && !asText) {
+          setError(
+            `${file.name}：目前只支持图片与文本文件（txt/md/json/csv/代码文件等），Office/PDF 还没做`,
+          );
           continue;
         }
-        if (file.size > MAX_FILE_BYTES) {
-          setError(`${file.name} 太大（上限 ${MAX_FILE_BYTES / 1024 / 1024}MB）`);
+        const limit = asText ? MAX_TEXT_FILE_BYTES : MAX_FILE_BYTES;
+        if (file.size > limit) {
+          setError(`${file.name} 太大（上限 ${Math.round(limit / 1024)}KB）`);
           continue;
         }
 

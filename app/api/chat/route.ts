@@ -16,7 +16,7 @@ import { createId } from '@/lib/db/id';
 import { serializeParts } from '@/lib/db/messageParts';
 import { agents, messages as messagesTable, topics } from '@/lib/db/schema';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
-import { currentTurnImages, toModelMessagesWithImages } from '@/lib/llm/attachments';
+import { currentTurnImages, currentTurnTextBlocks, toModelMessagesWithImages } from '@/lib/llm/attachments';
 import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
 import { createRun, endRun, waitForQuestion } from '@/lib/llm/cliRuns';
 import { buildPiToolFlags, isPiCommand } from '@/lib/llm/piTools';
@@ -256,6 +256,10 @@ export async function POST(req: Request) {
             systemPrompt: effectiveCommand.includes('{{systemPrompt}}') ? null : agent.systemPrompt,
           });
 
+          // 文本类附件：内容并进 prompt（CLI 收不到 file part，只有文本这一条路）
+          const attachmentText = await currentTurnTextBlocks(uiMessages);
+          const finalPrompt = attachmentText ? `${promptText}\n\n${attachmentText}` : promptText;
+
           const runner = useRpc
             ? runPiRpcAgent({
                 // 当前轮的图片附件（pi 的 prompt 命令收 base64；json 模式传不了图）
@@ -282,10 +286,14 @@ export async function POST(req: Request) {
                   });
                 },
                 command: effectiveCommand,
-                prompt: promptText,
+                prompt: finalPrompt,
                 systemPrompt: agent.systemPrompt,
               })
-            : runCliAgent({ command: effectiveCommand, prompt: promptText, systemPrompt: agent.systemPrompt });
+            : runCliAgent({
+                command: effectiveCommand,
+                prompt: finalPrompt,
+                systemPrompt: agent.systemPrompt,
+              });
 
           for await (const chunk of runner) {
             writeChunk(chunk);

@@ -13,7 +13,7 @@ import { ThemeControls } from '@/components/ThemeControls';
 import { useIsMobile } from '@/components/useMediaQuery';
 import { parseStoredParts, deserializeParts } from '@/lib/db/messageParts';
 import type { Agent, ChatMessage, Topic } from '@/lib/db/schema';
-import { IMAGE_ACCEPT } from '@/lib/files/constants';
+import { FILE_ACCEPT } from '@/lib/files/constants';
 import { parseToolSettings, type ToolSetting } from '@/lib/tools/settings';
 
 import { AttachmentPreview } from './AttachmentPreview';
@@ -704,7 +704,7 @@ export function ChatView() {
         />
         {/* 选文件入口（隐藏 input；附件按钮/拖拽/粘贴都汇到 attachments.addFiles） */}
         <input
-          accept={IMAGE_ACCEPT}
+          accept={FILE_ACCEPT}
           multiple
           ref={fileInputRef}
           style={{ display: 'none' }}
