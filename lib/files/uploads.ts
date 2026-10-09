@@ -3,13 +3,14 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
-  extOf,
+  EXT_BY_MEDIA_TYPE,
   isLegacyOffice,
   isOfficeOrPdf,
   isTextFile,
   MAX_FILE_BYTES,
   MAX_OFFICE_FILE_BYTES,
   MAX_TEXT_FILE_BYTES,
+  storageExtensionFor,
   UPLOAD_DIR,
 } from './constants';
 
@@ -27,20 +28,8 @@ import {
  */
 const UPLOAD_URL_PREFIX = `/${UPLOAD_DIR}/`;
 
-const EXT_BY_MEDIA_TYPE: Record<string, string> = {
-  'application/json': 'json',
-  'text/css': 'css',
-  'text/csv': 'csv',
-  'text/html': 'html',
-  'text/javascript': 'js',
-  'text/markdown': 'md',
-  'text/plain': 'txt',
-  'text/xml': 'xml',
-  'image/gif': 'gif',
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-};
+/** 客户端探测已存在文件时要拼同样的 URL，这里统一给一份（含 sha1 截断长度） */
+export const UPLOAD_HASH_LENGTH = 32;
 
 export interface UploadedFile {
   filename: string;
@@ -71,12 +60,7 @@ export function isSupportedMediaType(mediaType: string): boolean {
 /** 浏览器 <input accept> 在 `constants.ts`（客户端要 import，不能引本文件） */
 
 /** 落盘用的扩展名：优先按 mime 映射，其次用原文件名的扩展名（代码文件 mime 不可靠） */
-function storageExtension(mediaType: string, filename?: string): string {
-  const byMime = EXT_BY_MEDIA_TYPE[mediaType];
-  if (byMime) return byMime;
-  const ext = extOf(filename ?? '');
-  return /^[a-z0-9]{1,8}$/.test(ext) ? ext : 'bin';
-}
+const storageExtension = storageExtensionFor;
 
 function decodeBase64(dataBase64: string): Buffer {
   // 兼容 data URL 前缀与 base64 里的空白/换行

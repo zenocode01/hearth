@@ -13,6 +13,7 @@ import {
 } from '@/lib/files/constants';
 
 import { prepareImageForUpload } from './imageCompress';
+import { probeExistingUpload } from './uploadDedup';
 
 /**
  * 输入框附件：选文件 / 拖拽 / 粘贴 → 上传到 `/api/files` → 拿到 `/uploads/<hash>.<ext>`
@@ -149,6 +150,29 @@ export function useAttachments() {
             error: `${filename} 太大（上限 ${Math.round(limit / 1024 / 1024)}MB）`,
             status: 'error',
           });
+          return;
+        }
+
+        // 先探一次：这个内容是不是已经在服务器上了（LobeChat 的 checkFileHash）
+        // 命中就跳过上传——重复发同一张截图/同一份文档时省掉整个 POST
+        const existingUrl = await probeExistingUpload({ dataBase64, filename, mediaType });
+        if (existingUrl) {
+          setItems((prev) =>
+            prev.map((item) => {
+              if (item.id !== id) return item;
+              revokeLocal(item.localUrl);
+              const reused: Attachment = {
+                filename,
+                id,
+                mediaType,
+                progress: 100,
+                size,
+                status: 'done',
+                url: existingUrl,
+              };
+              return reused;
+            }),
+          );
           return;
         }
 

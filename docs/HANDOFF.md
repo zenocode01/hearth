@@ -34,7 +34,8 @@
 | 内置工具调用 | `3b4802c` | `lib/llm/tools.ts`（计算器/当前时间/抓网页）+ `stopWhen` 多步 + 工具卡片 + 片段落库 `messages.parts` |
 | 工具列表与开关 | `078c364` `631e72d` `321f92d` `27b783b` | 输入框 ActionBar 入口 + Popover；pi 运行时显示**pi 的工具**（内置 8 + 扩展，实时读 settings/会话）；开关随会话保存并注入 `--tools +x` / `--exclude-tools y` |
 | 工具开关修复 | `9b70171` | pi 默认关的工具（powershell/grep/find/ls）开关点不动：归一成"无覆盖"后 pi 的默认"关"又赢回来 → 归一时只丢"本来就开着"的 auto |
-| 图片附件 L2-9 | `ab897c3` `0fb5e2f` *（+C 期本次）* | `lib/files/`（uploads 服务 + **客户端安全**常量 + Office/PDF 抽文本）→ `POST /api/files`（sha1 命名落 `public/uploads`，DB 只存引用）→ `useAttachments` + `AttachmentPreview`（选文件/拖拽/粘贴、缩略图+自写灯箱）→ `sendMessage({ files })` → 路由转模型 `file` part（内置模型）/ `prompt.images`（pi）/ 文本与文档抽成 `<file name>` 块；`StoredPart` 加 file 变体、**用户消息也落 parts**（否则刷新丢图）；依赖：`fflate` + `pdfjs-dist`；踩坑与取舍见 `.agents/skills/attachments-multimodal` |
+| 图片附件 L2-9 | `ab897c3` `0fb5e2f` `ff5fb12` | `lib/files/`（uploads 服务 + **客户端安全**常量 + Office/PDF 抽文本）→ `POST /api/files`（sha1 命名落 `public/uploads`，DB 只存引用）→ `useAttachments` + `AttachmentPreview`（选文件/拖拽/粘贴、缩略图+自写灯箱）→ `sendMessage({ files })` → 路由转模型 `file` part（内置模型）/ `prompt.images`（pi）/ 文本与文档抽成 `<file name>` 块；`StoredPart` 加 file 变体、**用户消息也落 parts**（否则刷新丢图）；依赖：`fflate` + `pdfjs-dist`；踩坑与取舍见 `.agents/skills/attachments-multimodal` |
+| 附件可靠性与体验 | `5f669a6` `a7d6c59` `f7bad8e` `6d61773` *（+去重本次）* | 抄 LobeChat 的四条小判定：① 超长正文给"前 4000 字预览 + 明确声明读不到"；② 非视觉模型（`LLM_VISION=0`）用显式占位符而不是静默丢图；③ 上传三态 + 进度（XHR）+ 失败重试 + 上传中禁用发送；④ 图片上传前压缩（1920px/3MB，PNG→webp）。另有"附件放回输入框"（URL 复用不重传；`addExisting` 随 ③ 那条 commit 落地）。**去重没抄它的 global_files 表**：落盘名本来就是 sha1，客户端 `HEAD /uploads/<hash>.<ext>` 探一下即可，零迁移且文件被删会自愈 |
 | pi 工具卡片 | `515d474` | `toolcall_end` / `role=toolResult` → UI 工具片段；刷新后卡片保留 |
 | todo UI | `a1246fe` | 工具卡片渲染 ✓/○ 清单 + 输入框上方**任务清单面板**（清单在工具结果 `details` 里，随消息持久化） |
 | question UI | `36f0d1e` `bedbdf9` | **RPC 模式**运行器 + 对话协议 + 等待回答的注册表/接口 + **输入框上方的提问栏**（pending 时内联不渲染、输入框禁用） |

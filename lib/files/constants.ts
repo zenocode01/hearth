@@ -115,6 +115,33 @@ export function extOf(filename: string): string {
   return index < 0 ? '' : filename.slice(index + 1).toLowerCase();
 }
 
+/**
+ * mime → 落盘扩展名。**服务端与客户端共用这一份**：
+ * 客户端要按同样的规则算出 `/uploads/<hash>.<ext>` 才能"先探一次再决定要不要上传"。
+ */
+export const EXT_BY_MEDIA_TYPE: Record<string, string> = {
+  'application/json': 'json',
+  'text/css': 'css',
+  'text/csv': 'csv',
+  'text/html': 'html',
+  'text/javascript': 'js',
+  'text/markdown': 'md',
+  'text/plain': 'txt',
+  'text/xml': 'xml',
+  'image/gif': 'gif',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
+
+/** 按 mime 猜落盘扩展名（猜不出就用原文件名里的，再不行 bin） */
+export function storageExtensionFor(mediaType: string, filename?: string): string {
+  const byMime = EXT_BY_MEDIA_TYPE[mediaType];
+  if (byMime) return byMime;
+  const ext = extOf(filename ?? '');
+  return /^[a-z0-9]{1,8}$/.test(ext) ? ext : 'bin';
+}
+
 /** 这个文件是不是"当纯文本读"的类型（mime 或扩展名任一命中即可） */
 export function isTextFile(input: { filename?: string; mediaType: string }): boolean {
   if ((TEXT_MEDIA_TYPES as readonly string[]).includes(input.mediaType)) return true;
