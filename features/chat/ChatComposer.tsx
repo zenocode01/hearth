@@ -6,6 +6,8 @@ import { memo, useRef, useState, type ReactNode } from 'react';
 import { useIsMobile } from '@/components/useMediaQuery';
 
 interface ChatComposerProps {
+  /** 上下文占用读数 + 手动压缩（操作栏 chip；手机上不给放，位置不够） */
+  contextMeter?: ReactNode;
   /** 待发送附件的预览区（挂在输入框上方） */
   attachmentSlot?: ReactNode;
   /** 附件按钮（操作栏左侧，工具入口旁边） */
@@ -32,6 +34,7 @@ export const ChatComposer = memo(
     attachmentSlot,
     attachButton,
     busy,
+    contextMeter,
     disabled,
     value,
     onChange,
@@ -121,6 +124,8 @@ export const ChatComposer = memo(
             {attachButton}
             {effortPicker}
             {toolPicker}
+            {/* 手机上操作栏已经挤满，上下文读数只在桌面端给 */}
+            {!isMobile && contextMeter}
           </Flexbox>
           {busy ? (
             <Button danger size={buttonSize} onClick={onStop}>

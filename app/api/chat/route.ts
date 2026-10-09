@@ -18,6 +18,7 @@ import { agents, messages as messagesTable, topics } from '@/lib/db/schema';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
 import { currentTurnImages, currentTurnTextBlocks, toModelMessagesWithImages } from '@/lib/llm/attachments';
 import { builtinSupportsVision } from '@/lib/llm/capabilities';
+import { prepareContext, withSummaryInstruction } from '@/lib/llm/compaction';
 import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
 import { createRun, endRun, waitForQuestion } from '@/lib/llm/cliRuns';
 import { buildPiToolFlags, isPiCommand } from '@/lib/llm/piTools';
@@ -336,13 +337,22 @@ export async function POST(req: Request) {
     throw error;
   }
 
+  // 上下文压缩：调模型前判定，超阈值就把旧历史压成摘要（失败降级成"照旧全量发"）
+  const context = await prepareContext({ messages: uiMessages, model, topicId });
+  if (context.error) console.error('[chat] 上下文压缩失败，本次按原样发送：', context.error);
+  if (context.compacted) {
+    console.info(
+      `[chat] 压缩上下文：${context.compressedCount} 条 → 摘要（估算 ${context.estimatedTokens} / 阈值 ${context.threshold}）`,
+    );
+  }
+
   const result = streamText({
     model,
-    // v7 不允许在 messages 里放 system 消息，人设走 instructions
-    instructions: agent?.systemPrompt ?? undefined,
+    // v7 不允许在 messages 里放 system 消息，人设走 instructions；会话摘要也从这条口进
+    instructions: withSummaryInstruction(agent?.systemPrompt, context.summary),
     // 自己转：附件是 /uploads 相对路径，SDK 的 convertToModelMessages 走 new URL() 会抛；
     // 且只把**当前轮**的图片转成 image part（历史附件只留文字，见 lib/llm/attachments.ts）
-    messages: await toModelMessagesWithImages(uiMessages, {
+    messages: await toModelMessagesWithImages(context.messages, {
       supportsVision: builtinSupportsVision(),
     }),
     temperature: agent?.temperature ?? undefined,

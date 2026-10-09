@@ -19,6 +19,7 @@ import { parseToolSettings, type ToolSetting } from '@/lib/tools/settings';
 import { AttachmentPreview } from './AttachmentPreview';
 import { BackBottom } from './BackBottom';
 import { ChatComposer } from './ChatComposer';
+import { ContextMeter } from './ContextMeter';
 import { EffortPicker } from './EffortPicker';
 import { EmptyState } from './EmptyState';
 import { findPendingQuestions, mergePendingQuestions } from './interventions';
@@ -740,6 +741,7 @@ export function ChatView() {
               value={topicEffort}
             />
           }
+          contextMeter={<ContextMeter refreshKey={messages.length} topicId={activeTopicId} />}
           value={draft}
           onChange={setDraft}
           onSend={() => void handleSend()}
