@@ -173,18 +173,19 @@ export async function* runPiRpcAgent(options: PiRpcOptions): AsyncGenerator<CliC
       if (event?.type === 'extension_ui_request' && typeof event.method === 'string') {
         if (DIALOG_METHODS.has(event.method) && typeof event.id === 'string') {
           queue.push({ event: event as { id: string; method: string }, kind: 'dialog' });
-          wake();
         }
         continue;
       }
 
       queue.push({ kind: 'line', line });
 
-      if (event?.type === 'agent_settled') {
-        done = true;
-        wake();
-      }
+      if (event?.type === 'agent_settled') done = true;
     }
+
+    // 每收到一段 stdout 都要唤醒消费者。踩过的坑：只在 agent_settled / dialog 时 wake，
+    // 普通增量（message_update）会一直攒在队列里，直到这一轮结束才被消费——用户看到的就是
+    // "pi 跑完一整个 loop 才一次性把内容全显示出来"。cli.ts 的非 RPC 分支就是每段都 wake。
+    wake();
   });
 
   child.on('error', (error) => {
