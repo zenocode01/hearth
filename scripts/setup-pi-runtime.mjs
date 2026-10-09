@@ -67,35 +67,37 @@ for (const name of ['models.json', 'auth.json']) {
   log(`✓ ${name} ← 全局配置`);
 }
 
-// 2) settings.json：沿用全局的默认模型选择，但**不带 packages/extensions**
-//    （packages 里的 pi-total-recall 正是慢的根源，见 lib/llm/piEnv.ts 的说明）
+// 2) settings.json：**不沿用**全局的 thinking level（实测 high 让每轮多花 3~25 秒）
 const destSettings = path.join(agentDir, 'settings.json');
+let generated = {
+  defaultProvider: 'local-llm-6001',
+  defaultModel: 'qwen3.8-flash-next-iq3_s',
+  // off / low / medium / high
+  defaultThinkingLevel: 'medium',
+};
+
+const globalSettings = path.join(globalAgentDir, 'settings.json');
+if (existsSync(globalSettings)) {
+  try {
+    const g = JSON.parse(readFileSync(globalSettings, 'utf8'));
+    generated = {
+      defaultProvider: g.defaultProvider ?? generated.defaultProvider,
+      defaultModel: g.defaultModel ?? generated.defaultModel,
+      defaultThinkingLevel: 'medium', // 刻意忽略全局的 high，理由见下
+    };
+  } catch (error) {
+    warn(`全局 settings.json 解析失败，用默认值：${error.message}`);
+  }
+}
+
 if (existsSync(destSettings) && !force) {
   log('· settings.json 已存在，跳过（--force 可覆盖）');
 } else {
-  let generated = {
-    defaultProvider: 'local-llm-6001',
-    defaultModel: 'qwen3.8-flash-next-iq3_s',
-    defaultThinkingLevel: 'high',
-  };
-
-  const globalSettings = path.join(globalAgentDir, 'settings.json');
-  if (existsSync(globalSettings)) {
-    try {
-      const g = JSON.parse(readFileSync(globalSettings, 'utf8'));
-      generated = {
-        defaultProvider: g.defaultProvider ?? generated.defaultProvider,
-        defaultModel: g.defaultModel ?? generated.defaultModel,
-        defaultThinkingLevel: g.defaultThinkingLevel ?? generated.defaultThinkingLevel,
-      };
-    } catch (error) {
-      warn(`全局 settings.json 解析失败，用默认值：${error.message}`);
-    }
-  }
-
   writeFileSync(destSettings, `${JSON.stringify(generated, null, 2)}\n`, 'utf8');
   log(`✓ settings.json ← 默认 ${generated.defaultProvider}/${generated.defaultModel}`);
   log('  （故意不带 packages/extensions：那正是慢的根源）');
+  log('  thinking level 固定 medium：实测 high 让同一请求从 12s 涨到 36s。');
+  log('  想改直接编辑 .pi-runtime/agent/settings.json 的 defaultThinkingLevel（off/low/medium/high）。');
 }
 
 // 3) 项目扩展：源码在 .pi/extensions/（进 git），复制到 agentDir/extensions/（用户级，不需要 trust）
