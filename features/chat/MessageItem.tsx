@@ -196,8 +196,11 @@ export const MessageItem = memo(
           if (hideTimer.current) window.clearTimeout(hideTimer.current);
           hideTimer.current = window.setTimeout(() => {
             hideTimer.current = null;
+            // 保险：若指针其实还停在这条消息（含动作栏）上，就别收
+            const msg = holderRef.current?.closest('.hearth-msg');
+            if (msg?.matches(':hover')) return;
             actionCtx?.clearIf(message.id);
-          }, 200);
+          }, 800);
         }}
       >
         {isUser ? (
