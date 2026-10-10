@@ -196,6 +196,8 @@ interface TopicSidebarProps {
   onCreate: () => void;
   onDelete: (id: string) => void;
   onManageAgents: () => void;
+  /** 打开「技能」页 */
+  onManageSkills: () => void;
   onRename: (id: string, title: string) => void;
   onRetryTopics: () => void;
   onSelect: (id: string) => void;
@@ -221,6 +223,7 @@ export const TopicSidebar = memo(
     onDelete,
     onAgentChange,
     onManageAgents,
+    onManageSkills,
     onRetryTopics,
     topicsError,
     topicsLoading,
@@ -246,6 +249,7 @@ export const TopicSidebar = memo(
         agents={agents}
         onChange={onAgentChange}
         onManage={onManageAgents}
+        onManageSkills={onManageSkills}
       />
       <Button block icon={<Icon icon={MessageSquarePlus} size={16} />} onClick={onCreate}>
         新建对话

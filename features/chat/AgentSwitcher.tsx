@@ -1,7 +1,7 @@
 'use client';
 
 import { Block, Icon, Popover, Text } from '@lobehub/ui';
-import { Check, ChevronsUpDown, Settings } from 'lucide-react';
+import { Check, ChevronsUpDown, Settings, Sparkles } from 'lucide-react';
 import { memo, useState, type ReactNode } from 'react';
 
 import type { Agent } from '@/lib/db/schema';
@@ -70,6 +70,8 @@ interface AgentSwitcherProps {
   /** 传空字符串表示"默认 Agent" */
   onChange: (agentId: string) => void;
   onManage: () => void;
+  /** 打开「技能」页 */
+  onManageSkills: () => void;
 }
 
 /**
@@ -78,7 +80,7 @@ interface AgentSwitcherProps {
  * 触发器必须是非 <button>（base-ui 要求 nativeButton={false}）。
  */
 export const AgentSwitcher = memo(
-  ({ agents, activeAgentId, onChange, onManage }: AgentSwitcherProps) => {
+  ({ agents, activeAgentId, onChange, onManage, onManageSkills }: AgentSwitcherProps) => {
     const [open, setOpen] = useState(false);
     const current = agents.find((agent) => agent.id === activeAgentId) ?? null;
     const label = current?.name ?? '默认 Agent';
@@ -121,6 +123,12 @@ export const AgentSwitcher = memo(
               avatar={<Icon icon={Settings} size={16} />}
               title="管理 Agent"
               onClick={() => select('', onManage)}
+            />
+            <SwitcherRow
+              avatar={<Icon icon={Sparkles} size={16} />}
+              subtitle="本地 SKILL.md 技能"
+              title="技能"
+              onClick={() => select('', onManageSkills)}
             />
           </div>
         }
