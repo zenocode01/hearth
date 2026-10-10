@@ -1,7 +1,7 @@
 'use client';
 
 import { Block, Icon, Popover, Text } from '@lobehub/ui';
-import { Check, ChevronsUpDown, Settings, Sparkles } from 'lucide-react';
+import { Check, ChevronsUpDown, Plug, Settings, Sparkles } from 'lucide-react';
 import { memo, useState, type ReactNode } from 'react';
 
 import type { Agent } from '@/lib/db/schema';
@@ -72,6 +72,8 @@ interface AgentSwitcherProps {
   onManage: () => void;
   /** 打开「技能」页 */
   onManageSkills: () => void;
+  /** 打开「MCP」页 */
+  onManageMcp: () => void;
 }
 
 /**
@@ -80,7 +82,7 @@ interface AgentSwitcherProps {
  * 触发器必须是非 <button>（base-ui 要求 nativeButton={false}）。
  */
 export const AgentSwitcher = memo(
-  ({ agents, activeAgentId, onChange, onManage, onManageSkills }: AgentSwitcherProps) => {
+  ({ agents, activeAgentId, onChange, onManage, onManageSkills, onManageMcp }: AgentSwitcherProps) => {
     const [open, setOpen] = useState(false);
     const current = agents.find((agent) => agent.id === activeAgentId) ?? null;
     const label = current?.name ?? '默认 Agent';
@@ -129,6 +131,12 @@ export const AgentSwitcher = memo(
               subtitle="本地 SKILL.md 技能"
               title="技能"
               onClick={() => select('', onManageSkills)}
+            />
+            <SwitcherRow
+              avatar={<Icon icon={Plug} size={16} />}
+              subtitle="外部 MCP server 的工具"
+              title="MCP"
+              onClick={() => select('', onManageMcp)}
             />
           </div>
         }

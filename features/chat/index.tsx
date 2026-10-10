@@ -162,6 +162,7 @@ export function ChatView() {
     // 空闲时预取「管理 Agent」页（参考 refs 的意图预取：点过去更快）
     router.prefetch('/agents');
     router.prefetch('/skills');
+    router.prefetch('/mcp');
     const id = new URLSearchParams(window.location.search).get('topic');
     if (id) setActiveTopicId(id);
   }, [refreshAgents, refreshTopics, router]);
@@ -547,6 +548,10 @@ export function ChatView() {
                 setSidebarOpen(false);
                 router.push('/skills');
               }}
+              onManageMcp={() => {
+                setSidebarOpen(false);
+                router.push('/mcp');
+              }}
               onRename={(id, title) => void handleRename(id, title)}
               onRetryTopics={() => void refreshTopics({ silent: false })}
               onSelect={handleSelect}
@@ -567,6 +572,7 @@ export function ChatView() {
           onDelete={(id) => void handleDelete(id)}
           onManageAgents={() => router.push('/agents')}
           onManageSkills={() => router.push('/skills')}
+          onManageMcp={() => router.push('/mcp')}
           onRename={(id, title) => void handleRename(id, title)}
           onRetryTopics={() => void refreshTopics({ silent: false })}
           onSelect={handleSelect}

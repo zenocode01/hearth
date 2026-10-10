@@ -114,3 +114,21 @@ export const topicSummaries = sqliteTable(
 );
 
 export type TopicSummary = typeof topicSummaries.$inferSelect;
+
+/**
+ * MCP server（Streamable HTTP）：把外部 MCP 的工具并进对话（学 LobeHub 的 connectors，
+ * 但只做最小形态——HTTP、无 OAuth、无市场）。
+ */
+export const mcpServers = sqliteTable('mcp_servers', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  /** Streamable HTTP 端点，例如 https://example.com/mcp */
+  url: text('url').notNull(),
+  /** 额外请求头（JSON 对象字符串），如 {"Authorization":"Bearer xxx"} */
+  headers: text('headers'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export type McpServer = typeof mcpServers.$inferSelect;

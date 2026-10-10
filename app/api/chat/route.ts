@@ -20,6 +20,8 @@ import { currentTurnImages, currentTurnTextBlocks, toModelMessagesWithImages } f
 import { builtinSupportsVision } from '@/lib/llm/capabilities';
 import { prepareContext, withSummaryInstruction } from '@/lib/llm/compaction';
 import { getContextWindow } from '@/lib/llm/modelContext';
+import { listEnabledConfigs } from '@/lib/db/mcpServers';
+import { buildMcpTools } from '@/lib/mcp/tools';
 import { buildSkillTools, buildSkillsPrompt } from '@/lib/skills/agent';
 import { listSkills } from '@/lib/skills/store';
 import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
@@ -392,7 +394,9 @@ export async function POST(req: Request) {
   }
 
   // 技能工具（有技能才注册）+ 技能目录（拼进 instructions）
-  const toolsForTurn = { ...chatToolsForTurn, ...buildSkillTools(skills) };
+  // MCP：拉取已启用 server 的工具并进来（某个 server 连不上只跳过它）
+  const mcpTools = await buildMcpTools(listEnabledConfigs());
+  const toolsForTurn = { ...chatToolsForTurn, ...buildSkillTools(skills), ...mcpTools };
   const instructions = [
     withSummaryInstruction(agent?.systemPrompt, context.summary),
     buildSkillsPrompt(skills),
