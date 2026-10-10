@@ -17,11 +17,15 @@ interface ActiveActionBar {
   canEdit: boolean;
   /** portal 目标：被 hover 消息里的占位元素 */
   element: HTMLElement | null;
+  /** 消息 id（离开宽限期里只清自己，别误清刚 hover 的另一条） */
+  id: string;
   onAction: (key: MessageActionKey) => void;
   role: 'assistant' | 'user';
 }
 
 interface MessageActionContextValue {
+  /** 只清掉"当前仍是这条消息"时的动作栏（用于离开宽限期） */
+  clearIf: (id: string) => void;
   setActive: (active: ActiveActionBar | null) => void;
 }
 
@@ -35,7 +39,11 @@ export function useMessageAction(): MessageActionContextValue | null {
 export function MessageActionProvider({ children }: { children: ReactNode }) {
   const [active, setActiveState] = useState<ActiveActionBar | null>(null);
   const setActive = useCallback((next: ActiveActionBar | null) => setActiveState(next), []);
-  const value = useMemo(() => ({ setActive }), [setActive]);
+  const clearIf = useCallback(
+    (id: string) => setActiveState((current) => (current?.id === id ? null : current)),
+    [],
+  );
+  const value = useMemo(() => ({ clearIf, setActive }), [clearIf, setActive]);
 
   return (
     <MessageActionContext.Provider value={value}>

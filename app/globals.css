@@ -162,8 +162,10 @@ html[data-theme='dark'] .hearth-boot {
   animation: hearth-pulse 1.4s ease-in-out infinite;
 }
 
-/* 消息操作栏：默认隐藏，悬停（或触屏）显示 */
+/* 消息操作栏：默认隐藏，悬停（或触屏）显示。
+   预留 min-height，避免 hover 时占位从 0 变高把内容顶动（踩过：抖动导致按钮忽隐忽现） */
 .hearth-msg-actions {
+  min-height: 28px;
   opacity: 0;
   transition: opacity 0.15s ease;
 }

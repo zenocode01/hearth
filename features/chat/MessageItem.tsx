@@ -74,7 +74,16 @@ export const MessageItem = memo(
     const isUser = message.role === 'user';
     const holderRef = useRef<HTMLDivElement>(null);
     const actionCtx = useMessageAction();
+    /** 离开宽限期：鼠标离开后延迟收起，避免"刚离开就消失" */
+    const hideTimer = useRef<number | null>(null);
     const [editDraft, setEditDraft] = useState('');
+
+    useEffect(
+      () => () => {
+        if (hideTimer.current) window.clearTimeout(hideTimer.current);
+      },
+      [],
+    );
 
     // 进入编辑态时把当前文本填进编辑器
     useEffect(() => {
@@ -193,16 +202,27 @@ export const MessageItem = memo(
         onMouseEnter={() => {
           // 把单例动作栏"搬"到这条消息的占位里（对标 LobeHub 的 MessageActionProvider）
           if (!onAction || !holderRef.current) return;
+          if (hideTimer.current) {
+            window.clearTimeout(hideTimer.current);
+            hideTimer.current = null;
+          }
           actionCtx?.setActive({
             busy,
             canBranch,
             canEdit,
             element: holderRef.current,
+            id: message.id,
             onAction: (key) => onAction(message, key),
             role: isUser ? 'user' : 'assistant',
           });
         }}
-        onMouseLeave={() => actionCtx?.setActive(null)}
+        onMouseLeave={() => {
+          if (hideTimer.current) window.clearTimeout(hideTimer.current);
+          hideTimer.current = window.setTimeout(() => {
+            hideTimer.current = null;
+            actionCtx?.clearIf(message.id);
+          }, 200);
+        }}
       >
         {isUser ? (
           <>
