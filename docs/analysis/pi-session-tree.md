@@ -80,8 +80,10 @@ pi 的启动命令是 `pi --mode rpc --system-prompt "{{systemPrompt}}"`，**没
   - 验收：GET 返回 `tree / leafId / forkMessages / state`；POST navigate 后 leaf 变化且跨进程保持。
   - 说明：不建 `messages.cliEntryId`（避免改 schema 重启）；映射改为**按需**——分支用 pi 的 `get_fork_messages`，UI 消息靠文本/顺序对位。
 - **S3｜树视图 UI + 分支动作** ✅（已实现，待验收）：工具栏「会话树」面板（读 `get_tree`，点某条 user 消息「从这里分支」→ `navigate` 并把文本回填输入框）；pi 主题的消息动作里隐藏旧的「分支」（避免和会话树语义打架）。认 pi 的小工具抽到客户端可用的 `lib/llm/piCommand.ts`。
-- **S4｜用量与统计来自 pi**：`ContextMeter` 改用 `get_session_stats`。
-- **S5｜会话生命周期对齐**：重命名（`set_session_name`）、删除（清 session 文件）。
+- **S4｜按当前分支渲染对话** ✅（已实现，待验收）：新增 `lib/llm/piBranch.ts`——**直接读会话 JSONL**（不起进程，毫秒级）还原当前 leaf 分支的消息；`GET /api/topics/[id]` 对 pi 主题改返回该分支的消息，切分支后重载即换对话。
+  - 关键：pi 是 append-only 树、且我们的会话内导航总会 append 一个 label entry → **文件里最后一条带 id 的 entry 就是当前 leaf**，无需问 pi。
+- **S5｜用量与统计来自 pi**：`ContextMeter` 改用 `get_session_stats`（现在是我们的 DB 估算）。
+- **S6｜会话生命周期对齐**：重命名（`set_session_name`）、删除（清 session 文件）。
 
 ## 6. 待确认
 

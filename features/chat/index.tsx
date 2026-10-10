@@ -167,9 +167,11 @@ export function ChatView() {
     isPiCommand(activeAgent.cliCommand) &&
     isPiRpcCommand(activeAgent.cliCommand);
 
-  /** 从会话树选了分支点：把那句话放回输入框，编辑后发送即从该处开新分支。 */
+  /** 从会话树选了分支点：切到该分支（重载对话），把那句话放回输入框，编辑后发送即开新分支。 */
   const handleBranchFromTree = useCallback((text: string) => {
     setDraft(text);
+    // pi 主题的对话按当前分支渲染：导航后重载一次，消息列表就切到新分支
+    setHistoryAttempt((count) => count + 1);
     toast.success('已切到该分支点，编辑后发送即开新分支');
     requestAnimationFrame(() =>
       document.querySelector<HTMLTextAreaElement>('textarea')?.focus(),
