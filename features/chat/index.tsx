@@ -24,6 +24,7 @@ import { EffortPicker } from './EffortPicker';
 import { EmptyState } from './EmptyState';
 import { findPendingQuestions, mergePendingQuestions } from './interventions';
 import { MessageItem } from './MessageItem';
+import { MessageActionProvider } from './MessageActionProvider';
 import type { MessageActionKey } from './MessageActions';
 import { MessageSkeleton } from './MessageSkeleton';
 import { PendingIsland } from './PendingIsland';
@@ -748,6 +749,7 @@ export function ChatView() {
 
         {/* 消息区：relative 容器承载"回到最新"按钮 */}
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          <MessageActionProvider>
           <div
             className="hearth-scroll"
             ref={scrollRef}
@@ -802,6 +804,7 @@ export function ChatView() {
               <div aria-hidden style={{ flexShrink: 0, height: spacerHeight }} />
             )}
           </div>
+          </MessageActionProvider>
 
           <BackBottom visible={!atBottom} onClick={() => scrollToBottom(true)} />
         </div>

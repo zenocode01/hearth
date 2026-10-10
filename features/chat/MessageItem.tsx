@@ -2,13 +2,14 @@
 
 import { Markdown } from '@lobehub/ui';
 import { isToolUIPart, type UIMessage } from 'ai';
-import { memo } from 'react';
+import { memo, useRef } from 'react';
 
 import { AgentAvatar } from '@/features/agent/AgentAvatar';
 
 import { AssistantProcess } from './AssistantProcess';
 import { AttachmentPreview } from './AttachmentPreview';
-import { MessageActions, type MessageActionKey } from './MessageActions';
+import { useMessageAction } from './MessageActionProvider';
+import type { MessageActionKey } from './MessageActions';
 import { ReasoningBlock } from './ReasoningBlock';
 import { ToolCard } from './ToolCard';
 
@@ -59,6 +60,8 @@ export const MessageItem = memo(
     onAction,
   }: MessageItemProps) => {
     const isUser = message.role === 'user';
+    const holderRef = useRef<HTMLDivElement>(null);
+    const actionCtx = useMessageAction();
 
     const text = message.parts
       .map((part) => (part.type === 'text' ? part.text : ''))
@@ -164,6 +167,18 @@ export const MessageItem = memo(
           flexDirection: 'column',
           gap: 2,
         }}
+        onMouseEnter={() => {
+          // 把单例动作栏"搬"到这条消息的占位里（对标 LobeHub 的 MessageActionProvider）
+          if (!onAction || !holderRef.current) return;
+          actionCtx?.setActive({
+            busy,
+            canBranch,
+            element: holderRef.current,
+            onAction: (key) => onAction(message, key),
+            role: isUser ? 'user' : 'assistant',
+          });
+        }}
+        onMouseLeave={() => actionCtx?.setActive(null)}
       >
         {isUser ? (
           <>
@@ -215,14 +230,11 @@ export const MessageItem = memo(
         )}
 
         {onAction && (
-          <div className="hearth-msg-actions" style={{ paddingLeft: isUser ? 0 : 36 }}>
-            <MessageActions
-              busy={busy}
-              canBranch={canBranch}
-              role={isUser ? 'user' : 'assistant'}
-              onAction={(key) => onAction(message, key)}
-            />
-          </div>
+          <div
+            className="hearth-msg-actions"
+            ref={holderRef}
+            style={{ paddingLeft: isUser ? 0 : 36 }}
+          />
         )}
       </div>
     );
