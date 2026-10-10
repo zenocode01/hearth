@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Flexbox, TextArea } from '@lobehub/ui';
-import { memo, useRef, useState, type ReactNode } from 'react';
+import { memo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import { useIsMobile } from '@/components/useMediaQuery';
 
@@ -26,6 +26,8 @@ interface ChatComposerProps {
   onStop: () => void;
   /** 工具入口等（放在输入框下方的操作栏左侧，参考 LobeHub 的 ActionBar） */
   toolPicker?: ReactNode;
+  /** 已发送过的输入历史（↑/↓ 翻，对标 LobeHub 的 InputHistoryPopup） */
+  history?: string[];
   /** 受控草稿（"放回输入框"会改写它） */
   value: string;
 }
@@ -46,10 +48,13 @@ export const ChatComposer = memo(
     effortPicker,
     sessionTree,
     toolPicker,
+    history,
   }: ChatComposerProps) => {
     const composingRef = useRef(false);
     const dragDepthRef = useRef(0);
     const [dragging, setDragging] = useState(false);
+    /** 输入历史浏览位置：-1 = 不在浏览（对标 LobeHub 的输入历史） */
+    const [histIndex, setHistIndex] = useState(-1);
     const isMobile = useIsMobile();
     const canSend = (value.trim().length > 0 || Boolean(attachmentSlot)) && !busy;
     // 触摸设备上把主按钮做大到 40px（触控目标）
@@ -57,6 +62,29 @@ export const ChatComposer = memo(
 
     const submit = () => {
       if (canSend) onSend();
+    };
+
+    /** ↑/↓ 翻输入历史（光标在开头或输入框为空时触发；对标 LobeHub 的 InputHistoryPopup） */
+    const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      const items = history ?? [];
+      if (items.length === 0) return;
+      const el = event.currentTarget;
+      if (event.key === 'ArrowUp' && (value === '' || el.selectionStart === 0)) {
+        event.preventDefault();
+        const next = histIndex < 0 ? items.length - 1 : Math.max(0, histIndex - 1);
+        setHistIndex(next);
+        onChange(items[next]);
+      } else if (event.key === 'ArrowDown' && histIndex >= 0) {
+        event.preventDefault();
+        const next = histIndex + 1;
+        if (next >= items.length) {
+          setHistIndex(-1);
+          onChange('');
+        } else {
+          setHistIndex(next);
+          onChange(items[next]);
+        }
+      }
     };
 
     return (
@@ -102,7 +130,11 @@ export const ChatComposer = memo(
             disabled ? '请先回答上面的问题…' : '输入消息，Enter 发送，Shift+Enter 换行'
           }
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            setHistIndex(-1);
+            onChange(event.target.value);
+          }}
+          onKeyDown={handleKeyDown}
           onCompositionEnd={() => (composingRef.current = false)}
           onCompositionStart={() => (composingRef.current = true)}
           onPaste={(event) => {

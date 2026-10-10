@@ -173,6 +173,17 @@ export function ChatView() {
   const busy = status === 'submitted' || (status === 'streaming' && !streamBlocked);
 
   const lastMessage = messages[messages.length - 1];
+  // 输入历史（↑/↓ 翻）：本会话已发过的用户消息文本
+  const inputHistory = useMemo(
+    () =>
+      messages
+        .filter((item) => item.role === 'user')
+        .map((item) =>
+          item.parts.map((part) => (part.type === 'text' ? part.text : '')).join('').trim(),
+        )
+        .filter(Boolean),
+    [messages],
+  );
   // 有待回答的提问时禁用输入框（避免并发发消息）
   const hasPendingQuestion = pendingQuestions.length > 0;
   const waitingFirstToken =
@@ -850,6 +861,7 @@ export function ChatView() {
             ) : null
           }
           contextMeter={<ContextMeter refreshKey={messages.length} topicId={activeTopicId} />}
+          history={inputHistory}
           value={draft}
           onChange={setDraft}
           onSend={() => void handleSend()}
