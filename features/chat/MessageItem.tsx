@@ -1,8 +1,8 @@
 'use client';
 
-import { Markdown } from '@lobehub/ui';
+import { Button, Markdown, TextArea } from '@lobehub/ui';
 import { isToolUIPart, type UIMessage } from 'ai';
-import { memo, useRef } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 import { AgentAvatar } from '@/features/agent/AgentAvatar';
 
@@ -24,9 +24,17 @@ interface MessageItemProps {
   busy?: boolean;
   /** 是否显示"分支"动作（pi 主题隐藏，改用会话树面板） */
   canBranch?: boolean;
+  /** 是否显示"编辑"动作（pi 主题隐藏） */
+  canEdit?: boolean;
+  /** 是否处于编辑态（用户消息） */
+  editing?: boolean;
   message: UIMessage;
   /** 消息操作（复制 / 放回输入框 / 重新生成 / 删除） */
   onAction?: (message: UIMessage, key: MessageActionKey) => void;
+  /** 取消编辑 */
+  onEditCancel?: () => void;
+  /** 提交编辑（id + 新文本） */
+  onEditSubmit?: (id: string, text: string) => void;
   /** 发起本次请求的时间戳（只对最后一条 AI 消息有意义） */
   startedAt?: number;
 }
@@ -57,11 +65,26 @@ export const MessageItem = memo(
     assistantBackground,
     assistantName,
     canBranch = true,
+    canEdit = true,
+    editing,
     onAction,
+    onEditCancel,
+    onEditSubmit,
   }: MessageItemProps) => {
     const isUser = message.role === 'user';
     const holderRef = useRef<HTMLDivElement>(null);
     const actionCtx = useMessageAction();
+    const [editDraft, setEditDraft] = useState('');
+
+    // 进入编辑态时把当前文本填进编辑器
+    useEffect(() => {
+      if (editing) {
+        const current = message.parts
+          .map((part) => (part.type === 'text' ? part.text : ''))
+          .join('');
+        setEditDraft(current);
+      }
+    }, [editing]);
 
     const text = message.parts
       .map((part) => (part.type === 'text' ? part.text : ''))
@@ -173,6 +196,7 @@ export const MessageItem = memo(
           actionCtx?.setActive({
             busy,
             canBranch,
+            canEdit,
             element: holderRef.current,
             onAction: (key) => onAction(message, key),
             role: isUser ? 'user' : 'assistant',
@@ -183,18 +207,42 @@ export const MessageItem = memo(
         {isUser ? (
           <>
             {files.length > 0 && <AttachmentPreview items={files} size={96} />}
-            <div
-              style={{
-                background: 'var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.06))',
-                borderRadius: 12,
-                maxWidth: '85%',
-                padding: '10px 14px',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
-              <span>{text}</span>
-            </div>
+            {editing ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: '85%', width: '100%' }}>
+                <TextArea
+                  autoFocus
+                  autoSize={{ maxRows: 8, minRows: 1 }}
+                  value={editDraft}
+                  onChange={(event) => setEditDraft(event.target.value)}
+                />
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  <Button size="small" onClick={onEditCancel}>
+                    取消
+                  </Button>
+                  <Button
+                    disabled={!editDraft.trim()}
+                    size="small"
+                    type="primary"
+                    onClick={() => onEditSubmit?.(message.id, editDraft)}
+                  >
+                    保存
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: 'var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.06))',
+                  borderRadius: 12,
+                  maxWidth: '85%',
+                  padding: '10px 14px',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                <span>{text}</span>
+              </div>
+            )}
           </>
         ) : (
           <div style={{ alignItems: 'flex-start', display: 'flex', gap: 8, maxWidth: '85%' }}>

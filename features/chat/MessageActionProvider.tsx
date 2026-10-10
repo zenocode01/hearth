@@ -14,6 +14,7 @@ import { MessageActions, type MessageActionKey } from './MessageActions';
 interface ActiveActionBar {
   busy?: boolean;
   canBranch: boolean;
+  canEdit: boolean;
   /** portal 目标：被 hover 消息里的占位元素 */
   element: HTMLElement | null;
   onAction: (key: MessageActionKey) => void;
@@ -44,6 +45,7 @@ export function MessageActionProvider({ children }: { children: ReactNode }) {
             <MessageActions
               busy={active.busy}
               canBranch={active.canBranch}
+              canEdit={active.canEdit}
               role={active.role}
               onAction={active.onAction}
             />,
