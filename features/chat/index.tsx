@@ -64,6 +64,9 @@ export function ChatView() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   const atBottomRef = useRef(true);
+  /** 「发送后钉顶」：spacer 高度（用户消息钉在顶部，助手在下方填充，两者都在视野内） */
+  const [spacerHeight, setSpacerHeight] = useState(0);
+  const pinningRef = useRef(false);
   const requestStartedAtRef = useRef<number | null>(null);
   // 刚由本页创建的会话：跳过一次历史加载（否则会把刚发出的消息清空）
   const skipHistoryForRef = useRef<string | null>(null);
@@ -317,14 +320,33 @@ export function ChatView() {
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_THRESHOLD;
     atBottomRef.current = near;
     setAtBottom(near);
+    // 用户往上翻 → 取消「钉顶」（去掉 spacer，回到普通滚动）
+    if (!near && pinningRef.current) {
+      pinningRef.current = false;
+      setSpacerHeight(0);
+    }
   }, []);
 
   // 新内容到达时：只有用户本来就在底部才跟随（上翻阅读时不被打断）
+  // 另外：发送后处于「钉顶」状态时，按视口算出底部 spacer，让用户消息停在顶部、助手在下方填充
   useEffect(() => {
-    if (atBottomRef.current) {
-      const el = scrollRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
+    const el = scrollRef.current;
+    if (!el) return;
+    if (pinningRef.current) {
+      const users = el.querySelectorAll<HTMLElement>('[data-role="user"]');
+      const lastUser = users[users.length - 1];
+      const rest = [...el.children].filter(
+        (child) => child.getAttribute('aria-hidden') !== 'true',
+      ) as HTMLElement[];
+      const last = rest[rest.length - 1];
+      if (lastUser && last) {
+        // 从"最后一条用户消息"顶部到"最后一条消息"底部的整段高度（不含 spacer）
+        const below =
+          last.getBoundingClientRect().bottom - lastUser.getBoundingClientRect().top;
+        setSpacerHeight(Math.max(0, el.clientHeight - below - 32));
+      }
     }
+    if (atBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   const handleSend = useCallback(async () => {
@@ -361,6 +383,7 @@ export function ChatView() {
     setDraft('');
     atBottomRef.current = true;
     setAtBottom(true);
+    pinningRef.current = true;
     requestStartedAtRef.current = Date.now();
     streamTopicIdRef.current = topicId;
     // 附件随消息一起发：消息里落 file 片段（URL 形态），发模型前才转 base64/image part
@@ -507,6 +530,8 @@ export function ChatView() {
     setActiveTopicId(null);
     setMessages([]);
     attachments.clear();
+    pinningRef.current = false;
+    setSpacerHeight(0);
   }, [attachments, clearError, keepStream, setMessages, stop]);
 
   const handleSelect = useCallback(
@@ -517,6 +542,8 @@ export function ChatView() {
       setSidebarOpen(false);
       attachments.clear();
       setActiveTopicId(id);
+      pinningRef.current = false;
+      setSpacerHeight(0);
     },
     [activeTopicId, attachments, clearError, keepStream, stop],
   );
@@ -695,6 +722,10 @@ export function ChatView() {
                 <Icon icon={ThinkIcon} size={14} />
                 模型思考中…
               </span>
+            )}
+            {/* 发送后「钉顶」的底部占位（学 LobeHub 的 spacer）：用户消息停在顶部、助手在下方填充 */}
+            {spacerHeight > 0 && (
+              <div aria-hidden style={{ flexShrink: 0, height: spacerHeight }} />
             )}
           </div>
 

@@ -157,6 +157,7 @@ export const MessageItem = memo(
     return (
       <div
         className="hearth-msg"
+        data-role={isUser ? 'user' : 'assistant'}
         style={{
           alignItems: isUser ? 'flex-end' : 'flex-start',
           display: 'flex',
