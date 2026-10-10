@@ -17,6 +17,8 @@ interface ChatComposerProps {
   disabled?: boolean;
   /** 思考等级切换（会话级，覆盖 Agent 设置；放在操作栏工具入口旁） */
   effortPicker?: ReactNode;
+  /** 会话树入口（pi 主题专用；放操作栏，桌面端给） */
+  sessionTree?: ReactNode;
   onChange: (value: string) => void;
   /** 选文件 / 拖拽 / 粘贴进来的文件 */
   onFiles?: (files: FileList | File[]) => void;
@@ -42,6 +44,7 @@ export const ChatComposer = memo(
     onSend,
     onStop,
     effortPicker,
+    sessionTree,
     toolPicker,
   }: ChatComposerProps) => {
     const composingRef = useRef(false);
@@ -124,7 +127,8 @@ export const ChatComposer = memo(
             {attachButton}
             {effortPicker}
             {toolPicker}
-            {/* 手机上操作栏已经挤满，上下文读数只在桌面端给 */}
+            {/* 手机上操作栏已经挤满，上下文读数 / 会话树只在桌面端给 */}
+            {!isMobile && sessionTree}
             {!isMobile && contextMeter}
           </Flexbox>
           {busy ? (

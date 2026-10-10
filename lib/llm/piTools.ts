@@ -245,20 +245,5 @@ export function buildPiSessionFlags(topicId: string | null | undefined): string[
   return ['--session-id', id];
 }
 
-/**
- * 判断这个 CLI 命令是不是 pi（去掉 `KEY=value` 前缀后看第一个 token）。
- * 认 pi / pi.cmd / pi.exe / 路径里带 pi-coding-agent 的写法。
- */
-export function isPiCommand(command: string | null | undefined): boolean {
-  if (!command?.trim()) return false;
-
-  const tokens = command.trim().split(/\s+/);
-  let index = 0;
-  while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[index])) index += 1;
-  const first = tokens[index];
-  if (!first) return false;
-
-  const normalized = first.replaceAll('"', '').replaceAll("'", '').toLowerCase();
-  const base = normalized.split(/[\\/]/).pop() ?? normalized;
-  return base === 'pi' || base === 'pi.cmd' || base === 'pi.exe' || normalized.includes('pi-coding-agent');
-}
+// pi 判定抽到 lib/llm/piCommand.ts（客户端组件也要用，不能带 fs 依赖）；这里 re-export 保持旧引用不变
+export { isPiCommand } from './piCommand';

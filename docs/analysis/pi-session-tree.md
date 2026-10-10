@@ -79,7 +79,7 @@ pi 的启动命令是 `pi --mode rpc --system-prompt "{{systemPrompt}}"`，**没
 - **S2｜pi 会话客户端 + 会话树/导航接口** ✅（后端已实现，待验收）：`lib/llm/piSession.ts`（一次性 RPC 客户端）+ 自研扩展 `.pi/extensions/hearth-tree.ts`（补 `navigateTree`）+ `GET/POST /api/topics/[id]/session`（读树/状态/可分支消息；`navigate` 开兄弟分支）。
   - 验收：GET 返回 `tree / leafId / forkMessages / state`；POST navigate 后 leaf 变化且跨进程保持。
   - 说明：不建 `messages.cliEntryId`（避免改 schema 重启）；映射改为**按需**——分支用 pi 的 `get_fork_messages`，UI 消息靠文本/顺序对位。
-- **S3｜树视图 UI + 分支动作**（下一步）：工具栏「会话树」面板（`get_tree`）+ 消息动作「分支」接到 `navigate`（pi 主题专用）。
+- **S3｜树视图 UI + 分支动作** ✅（已实现，待验收）：工具栏「会话树」面板（读 `get_tree`，点某条 user 消息「从这里分支」→ `navigate` 并把文本回填输入框）；pi 主题的消息动作里隐藏旧的「分支」（避免和会话树语义打架）。认 pi 的小工具抽到客户端可用的 `lib/llm/piCommand.ts`。
 - **S4｜用量与统计来自 pi**：`ContextMeter` 改用 `get_session_stats`。
 - **S5｜会话生命周期对齐**：重命名（`set_session_name`）、删除（清 session 文件）。
 

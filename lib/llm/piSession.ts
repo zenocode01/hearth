@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 
 import { buildCliInvocation, resolveCliCommand } from './cli';
+import { isPiRpcCommand } from './piCommand';
 import { checkPiRuntime, piEnvExtra } from './piEnv';
 
 /**
@@ -15,6 +16,8 @@ import { checkPiRuntime, piEnvExtra } from './piEnv';
  * 起进程 → 按 id 发命令、收 `response` → 拿完结果就关。一次进程里可连发多条命令，
  * 省掉多次冷启动。
  */
+
+export { isPiRpcCommand };
 
 export interface PiSessionRequest {
   /** 命令类型，如 get_state / get_tree / get_entries / compact / prompt … */
@@ -38,11 +41,6 @@ export interface PiSessionCallOptions {
   timeoutMs?: number;
   /** 我们的 topic id = pi 的 session id */
   topicId: string;
-}
-
-/** 判断命令是不是 pi 的 RPC 模式（会话管理命令都要走 RPC）。 */
-export function isPiRpcCommand(command: string | null | undefined): boolean {
-  return !!command && /--mode[=\s]+rpc\b/.test(command);
 }
 
 /**

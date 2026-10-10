@@ -14,6 +14,7 @@ import { useIsMobile } from '@/components/useMediaQuery';
 import { parseStoredParts, deserializeParts } from '@/lib/db/messageParts';
 import type { Agent, ChatMessage, Topic } from '@/lib/db/schema';
 import { FILE_ACCEPT } from '@/lib/files/constants';
+import { isPiCommand, isPiRpcCommand } from '@/lib/llm/piCommand';
 import { parseToolSettings, type ToolSetting } from '@/lib/tools/settings';
 
 import { AttachmentPreview } from './AttachmentPreview';
@@ -28,6 +29,7 @@ import type { MessageActionKey } from './MessageActions';
 import { MessageSkeleton } from './MessageSkeleton';
 import { PendingIsland } from './PendingIsland';
 import { QuestionBar } from './QuestionBar';
+import { SessionTree } from './SessionTree';
 import { TodoPanel } from './TodoPanel';
 import { ToolPicker } from './ToolPicker';
 import { TopicSidebar } from './TopicSidebar';
@@ -154,6 +156,25 @@ export function ChatView() {
           (part.type === 'text' || part.type === 'reasoning') && part.text.trim().length > 0,
       )
     );
+
+  // 当前会话是不是 pi（RPC）主题：是的话历史归 pi 管、分支走会话树面板、消息动作里隐藏「分支」
+  const activeAgent = useMemo(
+    () => agents.find((item) => item.id === activeAgentId) ?? null,
+    [agents, activeAgentId],
+  );
+  const isPiTopic =
+    activeAgent?.runtime === 'cli' &&
+    isPiCommand(activeAgent.cliCommand) &&
+    isPiRpcCommand(activeAgent.cliCommand);
+
+  /** 从会话树选了分支点：把那句话放回输入框，编辑后发送即从该处开新分支。 */
+  const handleBranchFromTree = useCallback((text: string) => {
+    setDraft(text);
+    toast.success('已切到该分支点，编辑后发送即开新分支');
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLTextAreaElement>('textarea')?.focus(),
+    );
+  }, []);
 
   // 启动：拉会话列表 + Agent 列表 + 从 URL 恢复当前会话（刷新后仍停在同一个会话）
   useEffect(() => {
@@ -641,6 +662,7 @@ export function ChatView() {
               messages.map((message, index) => (
                 <MessageItem
                   busy={busy}
+                  canBranch={!isPiTopic}
                   key={message.id}
                   message={message}
                   onAction={(target, key) => void handleMessageAction(target, key)}
@@ -752,6 +774,15 @@ export function ChatView() {
               onChange={(next) => void handleEffortChange(next)}
               value={topicEffort}
             />
+          }
+          sessionTree={
+            activeTopicId && isPiTopic ? (
+              <SessionTree
+                refreshKey={messages.length}
+                topicId={activeTopicId}
+                onBranch={handleBranchFromTree}
+              />
+            ) : null
           }
           contextMeter={<ContextMeter refreshKey={messages.length} topicId={activeTopicId} />}
           value={draft}

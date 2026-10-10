@@ -9,12 +9,14 @@ export type MessageActionKey = 'branch' | 'copy' | 'delete' | 'regenerate' | 're
 interface MessageActionsProps {
   /** 生成中时禁用"重新生成" */
   busy?: boolean;
+  /** 是否显示"分支"（pi 主题的分支走会话树面板，这里隐藏） */
+  canBranch?: boolean;
   onAction: (key: MessageActionKey) => void;
   role: 'assistant' | 'user';
 }
 
 /** 消息操作栏（参考 refs 的 MessageActionBar，取常用动作）。悬停显示，见 globals.css 的 .hearth-msg。 */
-export const MessageActions = memo(({ role, busy, onAction }: MessageActionsProps) => {
+export const MessageActions = memo(({ role, busy, canBranch = true, onAction }: MessageActionsProps) => {
   const items = useMemo(() => {
     const list: ActionIconGroupItemType[] = [
       { icon: <Copy size={16} />, key: 'copy', label: '复制' },
@@ -32,12 +34,15 @@ export const MessageActions = memo(({ role, busy, onAction }: MessageActionsProp
     }
 
     // 从这条消息派生一个分支会话（复制到此处为止，原会话不受影响）
-    list.push({ icon: <Split size={16} />, key: 'branch', label: '分支' });
+    // pi 主题的分支走会话树面板（同 topic 内兄弟分支），这里不重复给入口
+    if (canBranch) {
+      list.push({ icon: <Split size={16} />, key: 'branch', label: '分支' });
+    }
 
     list.push({ danger: true, icon: <Trash2 size={16} />, key: 'delete', label: '删除' });
 
     return list;
-  }, [busy, role]);
+  }, [busy, canBranch, role]);
 
   return (
     <ActionIconGroup
