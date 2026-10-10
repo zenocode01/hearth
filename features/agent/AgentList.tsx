@@ -1,14 +1,12 @@
 'use client';
 
 import { Button, Center, Flexbox, FluentEmoji, Icon, Text, Tooltip } from '@lobehub/ui';
-import { ActionIcon } from '@lobehub/ui/base-ui';
 import { MessageSquare, Plus, SquarePen, Terminal, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
 import { AsyncBoundary } from '@/components/AsyncBoundary';
 import { ListSkeleton } from '@/components/ListSkeleton';
-import { useConfirmDelete } from '@/components/confirmDialog';
 import { useIsMobile } from '@/components/useMediaQuery';
 import type { Agent } from '@/lib/db/schema';
 
@@ -20,8 +18,8 @@ type LoadStatus = 'error' | 'loading' | 'ready';
 export function AgentList() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [status, setStatus] = useState<LoadStatus>('loading');
+  const [confirmId, setConfirmId] = useState<string | null>(null);
   const isMobile = useIsMobile();
-  const confirm = useConfirmDelete();
   const router = useRouter();
 
   /** silent：删除后静默刷新（不闪骨架、失败也不把列表换成错误页） */
@@ -44,6 +42,7 @@ export function AgentList() {
 
   const remove = async (id: string) => {
     await fetch(`/api/agents/${id}`, { method: 'DELETE' });
+    setConfirmId(null);
     void load({ silent: true });
   };
 
@@ -136,35 +135,39 @@ export function AgentList() {
                   {agent.systemPrompt || '（未设置人设）'}
                 </Text>
               </Flexbox>
-              <Flexbox gap={4} horizontal>
-                <ActionIcon
-                  icon={SquarePen}
-                  size={{ blockSize: 28, size: 16 }}
-                  title="编辑"
-                  onMouseEnter={() => router.prefetch(`/agents/${agent.id}`)}
-                  onClick={() => router.push(`/agents/${agent.id}`)}
-                />
-                <ActionIcon
-                  danger
-                  icon={Trash2}
-                  size={{ blockSize: 28, size: 16 }}
-                  style={{ color: 'var(--ant-color-error, #ec5e41)' }}
-                  title="删除"
-                  onClick={() =>
-                    confirm.open({
-                      content: '删除后无法恢复；正在使用它的会话会回到默认 Agent。',
-                      onOk: () => remove(agent.id),
-                      title: `删除 Agent「${agent.name}」？`,
-                    })
-                  }
-                />
-              </Flexbox>
+              {confirmId === agent.id ? (
+                <Flexbox gap={8} horizontal>
+                  <Button danger size="small" onClick={() => void remove(agent.id)}>
+                    确认删除
+                  </Button>
+                  <Button size="small" onClick={() => setConfirmId(null)}>
+                    取消
+                  </Button>
+                </Flexbox>
+              ) : (
+                <Flexbox gap={4} horizontal>
+                  <Tooltip title="编辑">
+                    <Button
+                      icon={<SquarePen size={16} />}
+                      type="text"
+                      onMouseEnter={() => router.prefetch(`/agents/${agent.id}`)}
+                      onClick={() => router.push(`/agents/${agent.id}`)}
+                    />
+                  </Tooltip>
+                  <Tooltip title="删除">
+                    <Button
+                      danger
+                      icon={<Trash2 size={16} />}
+                      type="text"
+                      onClick={() => setConfirmId(agent.id)}
+                    />
+                  </Tooltip>
+                </Flexbox>
+              )}
             </Flexbox>
           ))}
         </Flexbox>
       </AsyncBoundary>
-
-      {confirm.modal}
     </Flexbox>
   );
 }

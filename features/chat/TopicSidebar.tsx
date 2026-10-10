@@ -1,11 +1,10 @@
 'use client';
 
 import { Button, Icon, Input, Popover, Text } from '@lobehub/ui';
-import { ActionIcon, toast } from '@lobehub/ui/base-ui';
+import { toast } from '@lobehub/ui/base-ui';
 import { Download, FileJson, FileText, MessageCircleQuestion, MessageSquarePlus, SquarePen, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
 
-import { useConfirmDelete } from '@/components/confirmDialog';
 import { Delayed } from '@/components/Delayed';
 import { ListSkeleton } from '@/components/ListSkeleton';
 import type { Agent, Topic } from '@/lib/db/schema';
@@ -25,9 +24,9 @@ interface TopicRowProps {
 
 const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }: TopicRowProps) => {
   const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [draft, setDraft] = useState(topic.title);
-  const confirm = useConfirmDelete();
 
   const save = () => {
     const next = draft.trim();
@@ -58,7 +57,7 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
 
   return (
     <div
-      onClick={() => !editing && onSelect(topic.id)}
+      onClick={() => !editing && !confirming && onSelect(topic.id)}
       style={{
         alignItems: 'center',
         background: active ? 'var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.06))' : undefined,
@@ -86,6 +85,18 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
           }}
           onPressEnter={save}
         />
+      ) : confirming ? (
+        <div style={{ alignItems: 'center', display: 'flex', flex: 1, gap: 6 }}>
+          <Text style={{ flex: 1, fontSize: 13 }} type="danger">
+            删除？
+          </Text>
+          <Button danger size="small" onClick={() => onDelete(topic.id)}>
+            删除
+          </Button>
+          <Button size="small" onClick={() => setConfirming(false)}>
+            取消
+          </Button>
+        </div>
       ) : (
         <>
           {waiting && (
@@ -100,17 +111,18 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
           <Text ellipsis style={{ flex: 1, fontSize: 13 }} title={topic.title}>
             {topic.title}
           </Text>
-          <ActionIcon
-            aria-label="重命名会话"
-            icon={SquarePen}
-            size={{ blockSize: 28, size: 14 }}
+          <Button
+            size="small"
             title="改名"
+            type="text"
             onClick={(event) => {
               event.stopPropagation();
               setDraft(topic.title);
               setEditing(true);
             }}
-          />
+          >
+            <Icon icon={SquarePen} size={14} />
+          </Button>
           <Popover
             content={
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: 6, width: 200 }}>
@@ -157,26 +169,19 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
               <Icon icon={Download} size={14} />
             </Button>
           </Popover>
-          <ActionIcon
-            aria-label="删除会话"
-            danger
-            icon={Trash2}
-            size={{ blockSize: 28, size: 14 }}
-            style={{ color: 'var(--ant-color-error, #ec5e41)' }}
+          <Button
+            size="small"
             title="删除"
+            type="text"
             onClick={(event) => {
               event.stopPropagation();
-              confirm.open({
-                content: '删除后无法恢复，会话中的消息会一起删除。',
-                onOk: () => onDelete(topic.id),
-                title: `删除会话「${topic.title}」？`,
-              });
+              setConfirming(true);
             }}
-          />
+          >
+            <Icon icon={Trash2} size={14} />
+          </Button>
         </>
       )}
-
-      {confirm.modal}
     </div>
   );
 });

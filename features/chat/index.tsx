@@ -10,7 +10,6 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ThemeControls } from '@/components/ThemeControls';
-import { useConfirmDelete } from '@/components/confirmDialog';
 import { useIsMobile } from '@/components/useMediaQuery';
 import { parseStoredParts, deserializeParts } from '@/lib/db/messageParts';
 import type { Agent, ChatMessage, Topic } from '@/lib/db/schema';
@@ -61,8 +60,6 @@ export function ChatView() {
 
   const isMobile = useIsMobile();
   const router = useRouter();
-  // 删除确认对话框（声明式、自包含；见 components/confirmDialog.tsx）
-  const { modal: deleteModal, open: openDeleteConfirm } = useConfirmDelete();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -467,20 +464,14 @@ export function ChatView() {
           break;
         }
         case 'delete': {
-          openDeleteConfirm({
-            content: '删除后无法恢复。',
-            onOk: async () => {
-              await fetch(`/api/messages/${message.id}`, { method: 'DELETE' });
-              setMessages((prev) => prev.filter((item) => item.id !== message.id));
-              void refreshTopics();
-            },
-            title: '删除这条消息？',
-          });
+          await fetch(`/api/messages/${message.id}`, { method: 'DELETE' });
+          setMessages((prev) => prev.filter((item) => item.id !== message.id));
+          void refreshTopics();
           break;
         }
       }
     },
-    [activeTopicId, attachments, openDeleteConfirm, refreshTopics, regenerate, setMessages],
+    [activeTopicId, attachments, refreshTopics, regenerate, setMessages],
   );
 
   const handleRetry = useCallback(async () => {
@@ -674,7 +665,6 @@ export function ChatView() {
                 <MessageItem
                   busy={busy}
                   canBranch={!isPiTopic}
-                  canDelete={!isPiTopic}
                   key={message.id}
                   message={message}
                   onAction={(target, key) => void handleMessageAction(target, key)}
@@ -815,9 +805,6 @@ export function ChatView() {
             event.target.value = '';
           }}
         />
-
-        {/* 删除消息的确认对话框（声明式、自包含） */}
-        {deleteModal}
       </div>
     </div>
   );

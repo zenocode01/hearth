@@ -14,8 +14,6 @@ interface MessageItemProps {
   busy?: boolean;
   /** 是否显示"分支"动作（pi 主题隐藏，改用会话树面板） */
   canBranch?: boolean;
-  /** 是否显示"删除"动作（pi 主题隐藏） */
-  canDelete?: boolean;
   message: UIMessage;
   /** 消息操作（复制 / 放回输入框 / 重新生成 / 删除） */
   onAction?: (message: UIMessage, key: MessageActionKey) => void;
@@ -27,7 +25,7 @@ interface MessageItemProps {
  * 渲染一条消息：用户为浅色气泡；AI **按片段顺序**渲染推理块 / 工具卡片 / Markdown 正文
  * （多步工具调用时的交错顺序与真实过程一致）。悬停显示操作栏；颜色用 antd CSS 变量。
  */
-export const MessageItem = memo(({ message, startedAt, busy, canBranch = true, canDelete = true, onAction }: MessageItemProps) => {
+export const MessageItem = memo(({ message, startedAt, busy, canBranch = true, onAction }: MessageItemProps) => {
   const isUser = message.role === 'user';
 
   const text = message.parts
@@ -129,7 +127,6 @@ export const MessageItem = memo(({ message, startedAt, busy, canBranch = true, c
           <MessageActions
             busy={busy}
             canBranch={canBranch}
-            canDelete={canDelete}
             role={isUser ? 'user' : 'assistant'}
             onAction={(key) => onAction(message, key)}
           />
