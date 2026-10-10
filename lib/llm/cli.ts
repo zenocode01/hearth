@@ -513,21 +513,28 @@ export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliCh
   }
 }
 
-/** 把对话历史 + 本次输入（必要时带上人设与摘要）拼成一段给 CLI 的文本。 */
+/** 把对话历史 + 本次输入（必要时带上人设、技能目录与摘要）拼成一段给 CLI 的文本。 */
 export function buildCliPrompt(options: {
   history: Array<{ content: string; role: 'assistant' | 'user' }>;
   question: string;
+  /** 技能目录（`<available_skills>`）；有就放在人设后面 */
+  skills?: string | null;
   /** 会话摘要（我们自己的压缩产物）；有就放在历史前面 */
   summary?: string | null;
   /** 命令模板里没有 {{systemPrompt}} 时传人设，会并进 prompt 开头 */
   systemPrompt?: string | null;
 }): string {
-  const { history, question, summary, systemPrompt } = options;
+  const { history, question, skills, summary, systemPrompt } = options;
   const recent = history.slice(-10);
   const sections: string[] = [];
 
   if (systemPrompt?.trim()) {
     sections.push(`你的角色设定：${systemPrompt.trim()}`);
+  }
+
+  // 技能目录：只给「名字 + 描述 + SKILL.md 路径」，正文由 CLI 自己 read
+  if (skills?.trim()) {
+    sections.push(skills.trim());
   }
 
   // 学 pi 的注入措辞：一句话说明"前面被压缩了"，再给 <summary> 本体

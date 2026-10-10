@@ -20,6 +20,8 @@ import { currentTurnImages, currentTurnTextBlocks, toModelMessagesWithImages } f
 import { builtinSupportsVision } from '@/lib/llm/capabilities';
 import { prepareContext, withSummaryInstruction } from '@/lib/llm/compaction';
 import { getContextWindow } from '@/lib/llm/modelContext';
+import { buildSkillTools, buildSkillsPrompt } from '@/lib/skills/agent';
+import { listSkills } from '@/lib/skills/store';
 import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
 import { createRun, endRun, waitForQuestion } from '@/lib/llm/cliRuns';
 import { buildPiToolFlags, isPiCommand } from '@/lib/llm/piTools';
@@ -104,6 +106,9 @@ export async function POST(req: Request) {
   const chatToolsForTurn = resolveChatTools(
     enabledToolNames(toolSettings, Object.keys(chatTools)),
   );
+
+  // 技能（Agent Skills）：扫本地 data/skills/ 目录，给模型一个「目录」，命中后再加载正文
+  const skills = listSkills();
 
   // 落库：本次新发的用户消息（id 天然去重，重复提交不会写两条）
   if (topicId) {
@@ -217,6 +222,9 @@ export async function POST(req: Request) {
       }
     }
 
+    // 技能目录（给 pi 的 prompt；pi 有 read 工具，直接用路径读 SKILL.md）
+    const cliSkillsPrompt = buildSkillsPrompt(skills, { includePaths: true });
+
     // pi 的工具开关：会话里的开关 → `--tools +x` / `--exclude-tools y` 注入到命令
     const piFlags = isPiCommand(command) ? buildPiToolFlags(toolSettings) : [];
     const effectiveCommand = piFlags.length > 0 ? `${command} ${piFlags.join(' ')}` : command;
@@ -291,6 +299,7 @@ export async function POST(req: Request) {
             question,
             // 模板里有 {{systemPrompt}} 就交给 CLI，没有则并进 prompt
             systemPrompt: effectiveCommand.includes('{{systemPrompt}}') ? null : agent.systemPrompt,
+            skills: cliSkillsPrompt,
             summary: cliSummary,
           });
 
@@ -382,10 +391,19 @@ export async function POST(req: Request) {
     );
   }
 
+  // 技能工具（有技能才注册）+ 技能目录（拼进 instructions）
+  const toolsForTurn = { ...chatToolsForTurn, ...buildSkillTools(skills) };
+  const instructions = [
+    withSummaryInstruction(agent?.systemPrompt, context.summary),
+    buildSkillsPrompt(skills),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
   const result = streamText({
     model,
-    // v7 不允许在 messages 里放 system 消息，人设走 instructions；会话摘要也从这条口进
-    instructions: withSummaryInstruction(agent?.systemPrompt, context.summary),
+    // v7 不允许在 messages 里放 system 消息，人设走 instructions；会话摘要 + 技能目录也从这条口进
+    instructions: instructions || undefined,
     // 自己转：附件是 /uploads 相对路径，SDK 的 convertToModelMessages 走 new URL() 会抛；
     // 且只把**当前轮**的图片转成 image part（历史附件只留文字，见 lib/llm/attachments.ts）
     messages: await toModelMessagesWithImages(context.messages, {
@@ -398,7 +416,7 @@ export async function POST(req: Request) {
       ? { providerOptions: { 'hearth-llm': { reasoningEffort } } }
       : {}),
     // 内置工具（L2-11）：按会话开关筛选；模型主动调用 → 服务端执行 → 结果回填后继续生成
-    tools: Object.keys(chatToolsForTurn).length > 0 ? chatToolsForTurn : undefined,
+    tools: Object.keys(toolsForTurn).length > 0 ? toolsForTurn : undefined,
     // 最多 5 步（多轮工具调用），避免模型陷入死循环
     stopWhen: stepCountIs(5),
   });
