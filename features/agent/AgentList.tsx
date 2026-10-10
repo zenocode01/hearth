@@ -1,6 +1,7 @@
 'use client';
 
 import { Button, Center, Flexbox, FluentEmoji, Icon, Text, Tooltip } from '@lobehub/ui';
+import { ActionIcon } from '@lobehub/ui/base-ui';
 import { MessageSquare, Plus, SquarePen, Terminal, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
@@ -135,28 +136,26 @@ export function AgentList() {
                 </Text>
               </Flexbox>
               <Flexbox gap={4} horizontal>
-                <Tooltip title="编辑">
-                  <Button
-                    icon={<SquarePen size={16} />}
-                    type="text"
-                    onMouseEnter={() => router.prefetch(`/agents/${agent.id}`)}
-                    onClick={() => router.push(`/agents/${agent.id}`)}
-                  />
-                </Tooltip>
-                <Tooltip title="删除">
-                  <Button
-                    danger
-                    icon={<Trash2 size={16} />}
-                    type="text"
-                    onClick={() =>
-                      confirmDelete({
-                        content: '删除后无法恢复；正在使用它的会话会回到默认 Agent。',
-                        onOk: () => remove(agent.id),
-                        title: `删除 Agent「${agent.name}」？`,
-                      })
-                    }
-                  />
-                </Tooltip>
+                <ActionIcon
+                  icon={SquarePen}
+                  size={{ blockSize: 28, size: 16 }}
+                  title="编辑"
+                  onMouseEnter={() => router.prefetch(`/agents/${agent.id}`)}
+                  onClick={() => router.push(`/agents/${agent.id}`)}
+                />
+                <ActionIcon
+                  danger
+                  icon={Trash2}
+                  size={{ blockSize: 28, size: 16 }}
+                  title="删除"
+                  onClick={() =>
+                    confirmDelete({
+                      content: '删除后无法恢复；正在使用它的会话会回到默认 Agent。',
+                      onOk: () => remove(agent.id),
+                      title: `删除 Agent「${agent.name}」？`,
+                    })
+                  }
+                />
               </Flexbox>
             </Flexbox>
           ))}

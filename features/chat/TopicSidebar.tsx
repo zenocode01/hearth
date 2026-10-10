@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Icon, Input, Popover, Text } from '@lobehub/ui';
-import { toast } from '@lobehub/ui/base-ui';
+import { ActionIcon, toast } from '@lobehub/ui/base-ui';
 import { Download, FileJson, FileText, MessageCircleQuestion, MessageSquarePlus, SquarePen, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
 
@@ -99,18 +99,16 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
           <Text ellipsis style={{ flex: 1, fontSize: 13 }} title={topic.title}>
             {topic.title}
           </Text>
-          <Button
-            size="small"
+          <ActionIcon
+            icon={SquarePen}
+            size={{ blockSize: 28, size: 14 }}
             title="改名"
-            type="text"
             onClick={(event) => {
               event.stopPropagation();
               setDraft(topic.title);
               setEditing(true);
             }}
-          >
-            <Icon icon={SquarePen} size={14} />
-          </Button>
+          />
           <Popover
             content={
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: 6, width: 200 }}>
@@ -157,10 +155,11 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
               <Icon icon={Download} size={14} />
             </Button>
           </Popover>
-          <Button
-            size="small"
+          <ActionIcon
+            danger
+            icon={Trash2}
+            size={{ blockSize: 28, size: 14 }}
             title="删除"
-            type="text"
             onClick={(event) => {
               event.stopPropagation();
               confirmDelete({
@@ -169,9 +168,7 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
                 title: `删除会话「${topic.title}」？`,
               });
             }}
-          >
-            <Icon icon={Trash2} size={14} />
-          </Button>
+          />
         </>
       )}
     </div>
