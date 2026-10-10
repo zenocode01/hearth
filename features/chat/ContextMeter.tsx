@@ -13,6 +13,7 @@ interface SummaryRow {
 }
 
 interface Stats {
+  contextWindow: number | null;
   estimatedTokens: number;
   keepRecentTurns: number;
   limit: number;
@@ -175,8 +176,11 @@ export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps
               </div>
 
               <Text style={{ fontSize: 11.5, lineHeight: 1.6 }} type="secondary">
-                共 {stats.messageCount} 条消息；超过 {stats.threshold} tokens 时自动把旧消息压成摘要，
-                保留最近 {stats.keepRecentTurns} 轮原文。原消息不删，只是不再发给模型。
+                {stats.contextWindow
+                  ? `模型窗口 ${formatTokens(stats.contextWindow)}（按 80% 取阈）；`
+                  : ''}
+                超过 {stats.threshold} tokens 时自动把旧消息压成摘要，保留最近{' '}
+                {stats.keepRecentTurns} 轮原文。原消息不删，只是不再发给模型。
               </Text>
 
               {stats.summaryCount > 0 ? (

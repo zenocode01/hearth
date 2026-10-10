@@ -19,8 +19,8 @@ import { messages as messagesTable, topicSummaries } from '@/lib/db/schema';
 import type { ChatMessage, TopicSummary } from '@/lib/db/schema';
 import { getLatestSummary, insertSummary, listSummaries } from '@/lib/db/topicSummaries';
 import {
-  COMPRESS_TOKEN_LIMIT,
   KEEP_RECENT_TURNS,
+  compressBaseLimit,
   decideCompression,
   estimateMessagesTokens,
   estimateTokens,
@@ -212,8 +212,11 @@ export async function prepareContext(input: {
   messages: UIMessage[];
   model: LanguageModel;
   topicId?: string | null;
+  /** 模型上下文窗口（tokens）；阈值按它的 80% 算。不传则退回固定 16000 */
+  contextWindow?: number;
 }): Promise<PreparedContext> {
   const { messages, model, topicId } = input;
+  const baseLimit = compressBaseLimit(input.contextWindow ?? 0);
   const summary = topicId ? getLatestSummary(topicId) : null;
   const covered = coveredThroughIndex(messages, summary);
   const active = messages.slice(covered);
@@ -221,6 +224,8 @@ export async function prepareContext(input: {
   // 估算 = 未覆盖的历史 + 摘要自身（摘要也要进上下文）
   const estimated = estimateActiveTokens(active, summary);
   const decision = decideCompression({
+    baseLimit,
+    contextWindow: input.contextWindow,
     estimatedTokens: estimated,
     force: input.force,
     hasSummary: Boolean(summary),
@@ -303,7 +308,8 @@ export function loadTopicMessages(topicId: string): UIMessage[] {
 }
 
 /** 给 UI 的上下文占用读数（chip 与 Popover 用）。 */
-export function topicContextStats(topicId: string) {
+export function topicContextStats(topicId: string, contextWindow?: number) {
+  const baseLimit = compressBaseLimit(contextWindow ?? 0);
   const history = loadTopicMessages(topicId);
   const summary = getLatestSummary(topicId);
   const summaries = listSummaries(topicId);
@@ -312,11 +318,14 @@ export function topicContextStats(topicId: string) {
     estimatedTokens: estimateActiveTokens(history.slice(coveredThroughIndex(history, summary)), summary),
     // 阈值与聊天路由判定同源：有摘要时是迟滞后的水位
     threshold: decideCompression({
+      baseLimit,
+      contextWindow,
       estimatedTokens: 0,
       hasSummary: Boolean(summary),
     }).threshold,
     keepRecentTurns: KEEP_RECENT_TURNS,
-    limit: COMPRESS_TOKEN_LIMIT,
+    limit: baseLimit,
+    contextWindow: contextWindow ?? null,
     messageCount: history.length,
     summaryCount: summaries.length,
     summaries: summaries.slice(0, 5).map((item) => ({

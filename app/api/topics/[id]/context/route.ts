@@ -5,6 +5,7 @@ import { agents, topics } from '@/lib/db/schema';
 import { deleteLatestSummary } from '@/lib/db/topicSummaries';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
 import { loadTopicMessages, prepareContext, topicContextStats } from '@/lib/llm/compaction';
+import { getContextWindow } from '@/lib/llm/modelContext';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -33,9 +34,13 @@ export async function GET(_req: Request, { params }: Params) {
     if (!exists) return Response.json({ error: '会话不存在' }, { status: 404 });
   }
 
+  const contextWindow = await getContextWindow({
+    modelId: agent?.model,
+    runtime: agent?.runtime === 'cli' ? 'cli' : 'api',
+  });
+
   return Response.json({
-    ...topicContextStats(id),
-    // 外部 CLI（pi 等）用它自己的 compaction，这条链路不做压缩 → UI 不显示这个 chip
+    ...topicContextStats(id, contextWindow),
     runtime: agent?.runtime ?? 'api',
   });
 }
@@ -50,6 +55,10 @@ export async function GET(_req: Request, { params }: Params) {
 export async function POST(_req: Request, { params }: Params) {
   const { id } = await params;
   const agent = agentOf(id);
+  const contextWindow = await getContextWindow({
+    modelId: agent?.model,
+    runtime: agent?.runtime === 'cli' ? 'cli' : 'api',
+  });
 
   let model;
   try {
@@ -65,14 +74,14 @@ export async function POST(_req: Request, { params }: Params) {
   }
 
   const history = loadTopicMessages(id);
-  const result = await prepareContext({ force: true, messages: history, model, topicId: id });
+  const result = await prepareContext({ contextWindow, force: true, messages: history, model, topicId: id });
 
   if (result.error) {
     return Response.json({ error: `压缩失败：${result.error}` }, { status: 502 });
   }
   if (!result.compacted) {
     return Response.json({
-      ...topicContextStats(id),
+      ...topicContextStats(id, contextWindow),
       compacted: false,
       reason: '历史还太短（最近几轮之外的内容不够压）',
       runtime: agent?.runtime ?? 'api',
@@ -80,7 +89,7 @@ export async function POST(_req: Request, { params }: Params) {
   }
 
   return Response.json({
-    ...topicContextStats(id),
+    ...topicContextStats(id, contextWindow),
     compacted: true,
     compressedCount: result.compressedCount,
     runtime: agent?.runtime ?? 'api',
@@ -95,10 +104,14 @@ export async function POST(_req: Request, { params }: Params) {
 export async function DELETE(_req: Request, { params }: Params) {
   const { id } = await params;
   const agent = agentOf(id);
+  const contextWindow = await getContextWindow({
+    modelId: agent?.model,
+    runtime: agent?.runtime === 'cli' ? 'cli' : 'api',
+  });
 
   const removed = deleteLatestSummary(id);
   return Response.json({
-    ...topicContextStats(id),
+    ...topicContextStats(id, contextWindow),
     removed,
     runtime: agent?.runtime ?? 'api',
   });

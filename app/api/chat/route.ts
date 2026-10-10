@@ -19,6 +19,7 @@ import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
 import { currentTurnImages, currentTurnTextBlocks, toModelMessagesWithImages } from '@/lib/llm/attachments';
 import { builtinSupportsVision } from '@/lib/llm/capabilities';
 import { prepareContext, withSummaryInstruction } from '@/lib/llm/compaction';
+import { getContextWindow } from '@/lib/llm/modelContext';
 import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
 import { createRun, endRun, waitForQuestion } from '@/lib/llm/cliRuns';
 import { buildPiToolFlags, isPiCommand } from '@/lib/llm/piTools';
@@ -192,6 +193,7 @@ export async function POST(req: Request) {
     if (topicId) {
       try {
         const prepared = await prepareContext({
+          contextWindow: await getContextWindow({ runtime: 'cli' }),
           messages: uiMessages,
           model: createChatModel(),
           topicId,
@@ -370,7 +372,9 @@ export async function POST(req: Request) {
   }
 
   // 上下文压缩：调模型前判定，超阈值就把旧历史压成摘要（失败降级成"照旧全量发"）
-  const context = await prepareContext({ messages: uiMessages, model, topicId });
+  // 阈值按模型上下文窗口的 80% 算（见 lib/llm/modelContext.ts）
+  const contextWindow = await getContextWindow({ runtime: 'api', modelId: agent?.model });
+  const context = await prepareContext({ contextWindow, messages: uiMessages, model, topicId });
   if (context.error) console.error('[chat] 上下文压缩失败，本次按原样发送：', context.error);
   if (context.compacted) {
     console.info(
