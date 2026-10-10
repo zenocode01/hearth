@@ -31,7 +31,8 @@ pi 的启动命令是 `pi --mode rpc --system-prompt "{{systemPrompt}}"`，**没
   - 会话：`get_state`（sessionId / sessionFile / messageCount / thinkingLevel…）、`get_messages`、`get_entries`（**游标式**、含被压缩与被放弃的分支）、`get_tree`、`get_fork_messages`、`switch_session`、`new_session`、`set_session_name`
   - 分支：`fork`（从某 user message 派生**新会话**）、`clone`（复制当前分支为新会话）
   - 上下文：`compact`、`set_auto_compaction`、`get_session_stats`（含 `contextUsage.{tokens,contextWindow,percent}`）
-- **RPC 没有"会话内跳 leaf"的命令**。但 RPC 模式给**扩展的 command context** 接了 `navigateTree(targetId)`（源码 `dist/modes/rpc/rpc-mode.js` 的 `commandContextActions`），扩展命令可通过 `prompt` 里的 `/命令名` 触发 → **我们可以用一个自研扩展补上会话内树导航**。
+- **RPC 没有"会话内跳 leaf"的命令**。但 RPC 模式给**扩展的 command context** 接了 `navigateTree(targetId)`（源码 `dist/modes/rpc/rpc-mode.js` 的 `commandContextActions`），扩展命令可通过 `prompt` 里的 `/命令名` 触发 → **我们用一个自研扩展补上**。
+  - 实测关键点：不带 summary 的 `navigateTree` 只改**内存 leaf**，我们"每轮新进程"会丢；**传 `label` 会让 pi append 一个 label entry**（成为新 leaf）→ 落盘，跨进程可续。已用 `.pi/extensions/hearth-tree.ts` + 探测脚本验证（7→8 entries，leaf 变化后重开进程仍保持）。
 - **事件**（`docs/json.md`）：`compaction_start` / `compaction_end`、`session_info_changed`、`thinking_level_changed`、`entry_appended`、`agent_settled`。
 
 ## 3. 关键取舍：谁管历史
@@ -75,12 +76,10 @@ pi 的启动命令是 `pi --mode rpc --system-prompt "{{systemPrompt}}"`，**没
 - **S1｜pi 会话持久化** ✅（已实现，待验收）：RPC 启动加 `--session-id <topicId>`；只发本次新消息；pi 主题关闭自研压缩与技能注入；手动压缩按钮对 pi 主题明确拦下。
   - 验收：同一 topic 连续多轮，pi 记得上下文（换进程后仍在）。
   - 待补（S5）：删 topic 时清掉对应的 pi 会话文件。
-- **S2｜消息 ↔ entry 映射**：`messages` 加 `cliEntryId`；每轮 `get_entries` 对账落库。
-  - 验收：DB 消息能定位到 pi entry。
-- **S3｜树视图 + 分支**：
-  - 新增自研扩展 `hearth-tree`（注册 `/hearth-navigate`、`/hearth-fork`），补 RPC 缺失的会话内导航；
-  - UI：会话树选择器（`get_tree`）+ 「分支」动作改为对 pi 主题走 fork / navigateTree。
-  - 验收：能从某条消息派生分支、能在树里切换、切换后上下文正确。
+- **S2｜pi 会话客户端 + 会话树/导航接口** ✅（后端已实现，待验收）：`lib/llm/piSession.ts`（一次性 RPC 客户端）+ 自研扩展 `.pi/extensions/hearth-tree.ts`（补 `navigateTree`）+ `GET/POST /api/topics/[id]/session`（读树/状态/可分支消息；`navigate` 开兄弟分支）。
+  - 验收：GET 返回 `tree / leafId / forkMessages / state`；POST navigate 后 leaf 变化且跨进程保持。
+  - 说明：不建 `messages.cliEntryId`（避免改 schema 重启）；映射改为**按需**——分支用 pi 的 `get_fork_messages`，UI 消息靠文本/顺序对位。
+- **S3｜树视图 UI + 分支动作**（下一步）：工具栏「会话树」面板（`get_tree`）+ 消息动作「分支」接到 `navigate`（pi 主题专用）。
 - **S4｜用量与统计来自 pi**：`ContextMeter` 改用 `get_session_stats`。
 - **S5｜会话生命周期对齐**：重命名（`set_session_name`）、删除（清 session 文件）。
 
