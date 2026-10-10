@@ -43,7 +43,7 @@
 | 改名 & 打磨 | `5dfec42` `be49ef3` `0a9e978` `e5e8dd1` | pi-web → **Hearth**（含内部前缀迁移）；移动端响应式；三态 + 启动占位 + 路由级 loading/预取 |
 | 导出/备份 L2-15 | `173e78c` | 侧栏会话行导出按钮（Popover 选 .md/.json，fetch→blob 下载 + toast）；`GET /api/topics/[id]/export` 附件下载（中文文件名 `filename*`）；`lib/export/topicExport` 纯逻辑（md 含推理 details、json 无损） |
 | 提问栏对齐 | `12ec940` | 注册表 v2（`topicId/input/method` + `listPendingQuestions`）+ `GET /api/cli-runs` 轮询（`usePendingRuns` 3s）→ **跨会话 island**（`PendingIsland`：chip+Popover+条件"全部同意"）+ 侧栏 ❓ 徽章；`QuestionBar` 收数组（>1 渲染 tab）、`mergePendingQuestions` 注册表兜底（切走/刷新后重建）；**切会话 `keepStream` 不 stop 挂起流** + `streamBlocked` 不算 busy；仓外修复 `~/.pi/agent/extensions/question.ts` 放行 rpc（`ctx.ui.select`） |
-| 上下文压缩 | `54b98db` `b0d6770` `add2f23` `90de601` `6d580fa` `3ec6105` | 会话太长把**旧历史压成滚动摘要**（原消息不删，只改发给模型的那份）；`topic_summaries` + 水位线 `throughMessageId`；阈值/迟滞(×1.3)/漂移(×1.2) 见 `lib/llm/contextBudget.ts`；摘要器**学 pi 的 compaction**（结构化 checkpoint：目标/约束/进度/决策/下一步/上下文 + 滚动更新指令）；**内置模型与外部 CLI（pi）都走我们的压缩**（CLI 摘要拼进 prompt，事实来源仍是 DB）；工具栏 `ContextMeter` chip（占用条 + 摘要预览 + 立即压缩 / 撤销最近一次）。踩坑与验法见 `.agents/skills/context-compaction` |
+| 上下文压缩 | `54b98db` `b0d6770` `add2f23` `90de601` `6d580fa` `3ec6105` | 会话太长把**旧历史压成滚动摘要**（原消息不删，只改发给模型的那份）；`topic_summaries` + 水位线 `throughMessageId`；阈值 = **模型上下文窗口的 80%**（按模型识别，见 `lib/llm/modelContext.ts`）；迟滞(压缩后 ×1.3 且不超窗口 90%)/漂移(×1.2) 见 `lib/llm/contextBudget.ts`；摘要器**学 pi 的 compaction**（结构化 checkpoint：目标/约束/进度/决策/下一步/上下文 + 滚动更新指令）；**内置模型与外部 CLI（pi）都走我们的压缩**（CLI 摘要拼进 prompt，事实来源仍是 DB）；工具栏 `ContextMeter` chip（占用条 + 摘要预览 + 立即压缩 / 撤销最近一次）。踩坑与验法见 `.agents/skills/context-compaction` |
 | pi 流式修复 | `6f311e1` | pi RPC 事件要攒到整轮结束才显示：stdout 处理**只在 agent_settled/dialog 时 wake**，普通增量一直不被消费 → 每段 stdout 都 `wake()` |
 
 ## 4. 关键文件地图（本轮重点）
@@ -57,6 +57,7 @@
 | `lib/llm/tools.ts` | Hearth 内置工具定义 + `TOOL_CATALOG`（UI 与模型**同源**） |
 | `lib/llm/compaction.ts` | 上下文压缩：`prepareContext`（判定→滚动摘要→该发的东西）+ `loadTopicMessages`/`topicContextStats`/`withSummaryInstruction` |
 | `lib/llm/contextBudget.ts` | token 估算 + 压缩阈值/迟滞/漂移（**纯逻辑，客户端可 import**） |
+| `lib/llm/modelContext.ts` | 上下文窗口识别（env `LLM_CONTEXT_WINDOW` > pi models.json 的 `contextWindow` > 内置 `/models` 的 `max_model_len`） |
 | `lib/db/topicSummaries.ts` | 摘要表读写（`getLatestSummary`/`listSummaries`/`insertSummary`/`deleteLatestSummary`/`deleteSummariesAfter`） |
 | `app/api/topics/[id]/context/route.ts` | 上下文占用读数（GET）/ 手动压缩（POST）/ 撤销（DELETE） |
 | `features/chat/ContextMeter.tsx` | 工具栏上下文 chip + popover（占用条 / 摘要预览 / 立即压缩 / 撤销） |

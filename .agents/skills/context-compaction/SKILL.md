@@ -16,7 +16,8 @@ description: 'Use for conversation context compression / summarization: the topi
 | 层 | 位置 |
 |---|---|
 | 表 | `lib/db/schema.ts` 的 `topicSummaries`（迁移 `0007_topic_summaries`）：`id / topic_id / content / through_message_id / compressed_count / token_count / created_at` |
-| 预算 | `lib/llm/contextBudget.ts`：`estimateTokens`（CJK≈1、其余 4 字符≈1）、`estimateMessagesTokens`（含 ×`DRIFT_MULTIPLIER` 1.2）、`decideCompression`（`COMPRESS_TOKEN_LIMIT` 默认 16000、摘要后水位 ×`RECOMPRESS_FACTOR` 1.3、`KEEP_RECENT_TURNS` 默认 6） |
+| 预算 | `lib/llm/contextBudget.ts`：`estimateTokens`（CJK≈1、其余 4 字符≈1）、`estimateMessagesTokens`（含 ×`DRIFT_MULTIPLIER` 1.2）、`compressBaseLimit(window)`（= env `CONTEXT_TOKEN_LIMIT` 覆盖 ?? **窗口 × 80%** ?? 16000）、`decideCompression`（压缩后水位 `min(base × RECOMPRESS_FACTOR 1.3, 窗口 × 90%)`、`KEEP_RECENT_TURNS` 默认 6） |
+| 窗口识别 | `lib/llm/modelContext.ts`：`getContextWindow({runtime, modelId})` —— env `LLM_CONTEXT_WINDOW` > pi 隔离环境 models.json 的 `contextWindow` > 内置 `GET {baseURL}/models` 的 `max_model_len`/`context_length`/`context_window` > 兜底 32768 |
 | 核心 | `lib/llm/compaction.ts`：`prepareContext`（判定→摘要→返回该发的东西）、`loadTopicMessages`、`topicContextStats`、`withSummaryInstruction`、`keepRecentStart` |
 | DB 助手 | `lib/db/topicSummaries.ts`：`getLatestSummary` / `listSummaries` / `insertSummary` / `deleteSummariesAfter` / `deleteLatestSummary` |
 | 接口 | `app/api/topics/[id]/context/route.ts`：GET 读数、POST 手动压缩（force）、DELETE 撤销 |
@@ -29,6 +30,17 @@ description: 'Use for conversation context compression / summarization: the topi
 2. **滚动摘要 + 水位线**：新摘要 = 旧摘要 + 未覆盖的新历史 再压一次；`throughMessageId` 是水位线，
    下次从它之后开始压。水位线指向的消息**已不在**（删过）→ 返回 0，旧摘要作废、从头重压。
 3. **判定点在"调模型之前"**：不是"每 N 轮查一次"——一条超大的工具结果就能炸穿上下文。
+
+## 阈值：模型上下文窗口的 80%（按模型识别）
+
+不写死阈值——不同模型窗口差很多（16k/128k/262k）。`getContextWindow` 按模型识别窗口
+（见上表），`compressBaseLimit` 取它的 80% 当首次压缩阈值：
+
+- **首次**：`窗口 × 80%`（env `CONTEXT_TOKEN_LIMIT` 可覆盖，验收调小用）；
+- **压缩后**：水位抬到 `min(base × 1.3, 窗口 × 90%)`（迟滞，且不顶到窗口边）；
+- 识别不到窗口 → 兜底 32768。
+
+ContextMeter 的 popover 会显示「模型窗口 N（按 80% 取阈）」。
 
 ## 摘要格式：学 pi 的 compaction 方法
 
