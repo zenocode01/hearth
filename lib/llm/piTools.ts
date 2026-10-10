@@ -234,6 +234,18 @@ export function buildPiToolFlags(
 }
 
 /**
+ * pi 的**会话参数**：拿我们的 topic id 当 pi 的 session id（1:1 映射）。
+ * `--session-id` 的语义是"用这个 id，没有就创建、有就续"——于是历史由 pi 自己持久化/加载，
+ * 我们每轮只发新消息（方案见 docs/analysis/pi-session-tree.md）。
+ * 没有 topicId（建会话失败）时返回空，退化成无状态（照旧发全量）。
+ */
+export function buildPiSessionFlags(topicId: string | null | undefined): string[] {
+  const id = topicId?.trim();
+  if (!id) return [];
+  return ['--session-id', id];
+}
+
+/**
  * 判断这个 CLI 命令是不是 pi（去掉 `KEY=value` 前缀后看第一个 token）。
  * 认 pi / pi.cmd / pi.exe / 路径里带 pi-coding-agent 的写法。
  */

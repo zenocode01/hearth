@@ -6,6 +6,7 @@ import { deleteLatestSummary } from '@/lib/db/topicSummaries';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
 import { loadTopicMessages, prepareContext, topicContextStats } from '@/lib/llm/compaction';
 import { getContextWindow } from '@/lib/llm/modelContext';
+import { isPiCommand } from '@/lib/llm/piTools';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -59,6 +60,17 @@ export async function POST(_req: Request, { params }: Params) {
     modelId: agent?.model,
     runtime: agent?.runtime === 'cli' ? 'cli' : 'api',
   });
+
+  // pi 主题的历史与压缩由 pi 自己管理（方案见 docs/analysis/pi-session-tree.md），
+  // 走我们的压缩只会写一份用不到的摘要。先明确拦下，后续会接到 pi 的 compact。
+  if (agent?.runtime === 'cli' && isPiCommand(agent.cliCommand)) {
+    return Response.json({
+      ...topicContextStats(id, contextWindow),
+      compacted: false,
+      reason: 'pi 会话的上下文由 pi 自己压缩，暂不支持在这里手动压缩。',
+      runtime: agent.runtime,
+    });
+  }
 
   let model;
   try {

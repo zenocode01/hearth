@@ -27,7 +27,7 @@ import { listSkills } from '@/lib/skills/store';
 import type { AgentEvent } from '@/lib/llm/agentEvents';
 import { buildCliPrompt, runCliAgent } from '@/lib/llm/cli';
 import { createRun, endRun, waitForQuestion } from '@/lib/llm/cliRuns';
-import { buildPiToolFlags, isPiCommand } from '@/lib/llm/piTools';
+import { buildPiSessionFlags, buildPiToolFlags, isPiCommand } from '@/lib/llm/piTools';
 import { runPiRpcAgent } from '@/lib/llm/piRpc';
 import { chatTools, resolveChatTools } from '@/lib/llm/tools';
 import { enabledToolNames, parseToolSettings } from '@/lib/tools/settings';
@@ -193,12 +193,18 @@ export async function POST(req: Request) {
       .map((message) => ({ content: textOf(message), role: message.role as 'assistant' | 'user' }))
       .filter((item) => item.content);
 
-    // 外部 CLI（pi 等）也走我们自己的压缩：学 pi 的 compaction 方法（结构化 checkpoint +
-    // 滚动更新），但事实来源仍是我们的 DB——这样删除/重新生成消息不会和 pi 的记忆打架。
-    // 超阈值就把旧历史压成摘要拼进 CLI prompt；失败一律降级成"照旧全量发"。
+    const isPi = isPiCommand(command);
+    // pi（方案 α）：用 topic id 当 session id，历史与压缩都交给 pi——我们每轮只发新消息。
+    const piSessionFlags = isPi ? buildPiSessionFlags(topicId) : [];
+    const sessionMode = piSessionFlags.length > 0;
+
+    // 无状态 CLI（opencode / claude 等）与内置模型才走我们自己的压缩：学 pi 的 compaction
+    // 方法（结构化 checkpoint + 滚动更新），事实来源仍是我们的 DB。超阈值就把旧历史压成
+    // 摘要拼进 CLI prompt；失败一律降级成"照旧全量发"。
+    // （pi 主题 sessionMode=true，压缩由 pi 自己做，这里跳过。）
     let cliHistory = history;
     let cliSummary: string | null = null;
-    if (topicId) {
+    if (topicId && !sessionMode) {
       try {
         const prepared = await prepareContext({
           contextWindow: await getContextWindow({ runtime: 'cli' }),
@@ -225,12 +231,13 @@ export async function POST(req: Request) {
       }
     }
 
-    // 技能目录（给 pi 的 prompt；pi 有 read 工具，直接用路径读 SKILL.md）
-    const cliSkillsPrompt = buildSkillsPrompt(skills, { includePaths: true });
+    // 技能目录：只给无状态 CLI 注入；pi 走它自己的技能发现（决策：外接 pi 用 pi 原生）
+    const cliSkillsPrompt = sessionMode ? null : buildSkillsPrompt(skills, { includePaths: true });
 
-    // pi 的工具开关：会话里的开关 → `--tools +x` / `--exclude-tools y` 注入到命令
-    const piFlags = isPiCommand(command) ? buildPiToolFlags(toolSettings) : [];
-    const effectiveCommand = piFlags.length > 0 ? `${command} ${piFlags.join(' ')}` : command;
+    // pi 的工具开关 + 会话参数（--session-id），注入到命令
+    const piFlags = isPi ? buildPiToolFlags(toolSettings) : [];
+    const extraFlags = [...piFlags, ...piSessionFlags];
+    const effectiveCommand = extraFlags.length > 0 ? `${command} ${extraFlags.join(' ')}` : command;
 
     const cliStream = createUIMessageStream({
       execute: async ({ writer }) => {
@@ -297,14 +304,24 @@ export async function POST(req: Request) {
         };
 
         try {
-          const promptText = buildCliPrompt({
-            history: cliHistory,
-            question,
-            // 模板里有 {{systemPrompt}} 就交给 CLI，没有则并进 prompt
-            systemPrompt: effectiveCommand.includes('{{systemPrompt}}') ? null : agent.systemPrompt,
-            skills: cliSkillsPrompt,
-            summary: cliSummary,
-          });
+          // pi（sessionMode）：历史在 pi 那边，这里只发本次新消息；人设走 --system-prompt。
+          // 模板没带 {{systemPrompt}} 时兜底把并进 prompt，避免人设静默丢失。
+          // 非 sessionMode：把（可能已压缩的）历史 + 技能目录 + 摘要拼成一段。
+          const persona = agent.systemPrompt?.trim() ?? '';
+          const promptText = sessionMode
+            ? persona && !effectiveCommand.includes('{{systemPrompt}}')
+              ? `你的角色设定：${persona}\n\n${question}`
+              : question
+            : buildCliPrompt({
+                history: cliHistory,
+                question,
+                // 模板里有 {{systemPrompt}} 就交给 CLI，没有则并进 prompt
+                systemPrompt: effectiveCommand.includes('{{systemPrompt}}')
+                  ? null
+                  : agent.systemPrompt,
+                skills: cliSkillsPrompt,
+                summary: cliSummary,
+              });
 
           // 文本类附件：内容并进 prompt（CLI 收不到 file part，只有文本这一条路）
           const attachmentText = await currentTurnTextBlocks(uiMessages);
