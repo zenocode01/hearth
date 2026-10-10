@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { checkPiRuntime, looksLikePiCommand, piEnvExtra } from './piEnv';
+import { heteroAgentOfCommand } from './heteroAgents';
 
 /**
  * 外部 CLI agent 运行器（参考 refs 的 heterogeneous agents，取其最小可用子集）。
@@ -435,9 +436,13 @@ export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliCh
     wake();
   });
   child.on('error', (error) => {
+    // 命令认得出是已知 CLI（pi/opencode/claude…）就给安装提示，别只说"确认已安装"
+    const agent = heteroAgentOfCommand(invocation.file);
+    const hint = agent?.installHint ? `。安装：${agent.installHint}` : '';
     failure = new Error(
       `无法启动命令「${invocation.file}」：${error.message}。请确认它已安装并在 PATH 中` +
         (process.platform === 'win32' ? `（可执行 where ${invocation.file} 检查）` : '') +
+        hint +
         `（${detail}）`,
     );
     done = true;

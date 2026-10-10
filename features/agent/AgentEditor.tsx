@@ -14,7 +14,6 @@ import {
   primaryColorsSwatches,
 } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
-import { ClaudeCode, OpenCode, Pi } from '@lobehub/icons';
 import { Slider } from 'antd';
 import { ArrowLeft, Bot, Check, FlaskConical, Terminal } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -23,6 +22,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { AsyncBoundary } from '@/components/AsyncBoundary';
 import { useIsMobile } from '@/components/useMediaQuery';
 import type { Agent } from '@/lib/db/schema';
+import { HETERO_CLI_AGENTS } from '@/lib/llm/heteroAgents';
 import { REASONING_EFFORTS } from '@/lib/llm/reasoning';
 
 import { AgentAvatar } from './AgentAvatar';
@@ -34,30 +34,11 @@ interface AgentEditorProps {
   id: string;
 }
 
-/** 外部 CLI 的常用预设（占位符见下方说明）；iconKey 用于「选预设顺便把品牌 logo 设成头像」 */
-const CLI_PRESETS = [
-  {
-    Icon: Pi,
-    iconKey: 'pi',
-    label: 'Pi',
-    // RPC 模式：支持 pi 扩展的交互（question 提问等），提示词走 RPC 命令
-    value: 'pi --mode rpc --system-prompt "{{systemPrompt}}"',
-  },
-  {
-    // opencode 默认和桌面端共用数据目录会互抢（报「Database is not empty and has no session table」），
-    // 用 XDG_DATA_HOME 给它一份独立数据目录；%LOCALAPPDATA% 由运行器展开
-    Icon: OpenCode,
-    iconKey: 'opencode',
-    label: 'OpenCode',
-    value: 'XDG_DATA_HOME=%LOCALAPPDATA%\\hearth opencode run "{{prompt}}"',
-  },
-  {
-    Icon: ClaudeCode,
-    iconKey: 'claude-code',
-    label: 'Claude Code',
-    value: 'claude -p --append-system-prompt "{{systemPrompt}}" "{{prompt}}"',
-  },
-];
+/** 外部 CLI 预设：从描述符目录派生（图标按 iconKey 从品牌图标里取）。 */
+const CLI_PRESETS = HETERO_CLI_AGENTS.flatMap((agent) => {
+  const Icon = AGENT_ICON_OPTIONS.find((option) => option.key === agent.iconKey)?.Icon;
+  return Icon ? [{ Icon, ...agent }] : [];
+});
 
 const runtimeOption = (icon: typeof Bot, label: string): ReactNode => (
   <span style={{ alignItems: 'center', display: 'inline-flex', gap: 6 }}>
@@ -109,6 +90,8 @@ export function AgentEditor({ id }: AgentEditorProps) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
+  const [detectResult, setDetectResult] = useState<string | null>(null);
   const [loadStatus, setLoadStatus] = useState<'error' | 'loading' | 'ready'>(
     isNew ? 'ready' : 'loading',
   );
@@ -228,6 +211,41 @@ export function AgentEditor({ id }: AgentEditorProps) {
       setTesting(false);
     }
   }, [payload]);
+
+  /** 检测命令里的可执行文件是否已安装（描述符目录 + PATH 探测）。 */
+  const detect = useCallback(async () => {
+    const command = cliCommand.trim();
+    if (!command) return;
+    setDetecting(true);
+    setDetectResult(null);
+    try {
+      const res = await fetch('/api/cli/detect', {
+        body: JSON.stringify({ command }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        executable?: string;
+        found?: boolean;
+        installHint?: string | null;
+        path?: string | null;
+      };
+      if (!res.ok) {
+        setDetectResult(data.error ?? '检测失败');
+      } else if (data.found) {
+        setDetectResult(`已安装：${data.path}`);
+      } else {
+        setDetectResult(
+          `没找到「${data.executable}」${data.installHint ? `，安装：${data.installHint}` : ''}`,
+        );
+      }
+    } catch {
+      setDetectResult('检测失败：无法连接服务');
+    } finally {
+      setDetecting(false);
+    }
+  }, [cliCommand]);
 
   // 编辑已有 Agent：加载中 / 加载失败（错误优先于骨架，失败不会停在骨架屏）
   if (loadStatus === 'loading') return <AgentEditorSkeleton />;
@@ -410,22 +428,35 @@ export function AgentEditor({ id }: AgentEditorProps) {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {CLI_PRESETS.map((preset) => (
                 <Button
-                  key={preset.label}
+                  key={preset.type}
                   icon={<preset.Icon size={14} />}
                   size="small"
-                  title={preset.value}
+                  title={preset.command}
                   onClick={() => {
-                    setCliCommand(preset.value);
+                    setCliCommand(preset.command);
                     // 头像还是默认 emoji（或已是品牌图标）时，顺便换成这个 Agent 的 logo
                     if (!avatar || avatar === '😀' || avatar.startsWith(ICON_AVATAR_PREFIX)) {
                       setAvatar(`${ICON_AVATAR_PREFIX}${preset.iconKey}`);
                     }
                   }}
                 >
-                  {preset.label}
+                  {preset.title}
                 </Button>
               ))}
+              <Button
+                disabled={!cliCommand.trim()}
+                loading={detecting}
+                size="small"
+                onClick={() => void detect()}
+              >
+                检测是否已安装
+              </Button>
             </div>
+            {detectResult && (
+              <Text style={{ fontSize: 12 }} type="secondary">
+                {detectResult}
+              </Text>
+            )}
             <Text style={{ fontSize: 12 }} type="secondary">
               {'{{prompt}}'} 会替换成「对话历史 + 本次输入」，{'{{systemPrompt}}'} 替换成人设；模板里没有{' '}
               {'{{prompt}}'} 时内容从 stdin 传入。
