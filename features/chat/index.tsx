@@ -51,6 +51,31 @@ export function ChatView() {
   const [historyAttempt, setHistoryAttempt] = useState(0);
   /** 输入框草稿（受控：支持"放回输入框"） */
   const [draft, setDraft] = useState('');
+  /** 当前草稿属于哪个会话（'new' = 还没建会话）；切会话时防串味 */
+  const draftTopicRef = useRef<string | null>(null);
+
+  // 草稿持久化（对标 LobeHub 的 useChatInputDraft）：按会话存 localStorage，刷新/切走再回来都不丢。
+  // 保存 effect 声明在载入 effect **之前**：切会话时保存先跑、此时 ref 还是旧会话 → 跳过，
+  // 避免把旧会话的草稿写进新会话。
+  useEffect(() => {
+    const key = activeTopicId ?? 'new';
+    if (draftTopicRef.current !== key) return;
+    try {
+      localStorage.setItem(`hearth-draft:${key}`, draft);
+    } catch {
+      /* 隐私模式忽略 */
+    }
+  }, [activeTopicId, draft]);
+
+  useEffect(() => {
+    const key = activeTopicId ?? 'new';
+    draftTopicRef.current = key;
+    try {
+      setDraft(localStorage.getItem(`hearth-draft:${key}`) ?? '');
+    } catch {
+      setDraft('');
+    }
+  }, [activeTopicId]);
   /** 本会话的工具开关（[] = 全部自动启用） */
   const [toolSettings, setToolSettings] = useState<ToolSetting[]>([]);
   /** 本会话的思考等级覆盖（'' = 跟随 Agent） */
