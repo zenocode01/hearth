@@ -1,6 +1,6 @@
 # HANDOFF —— Hearth 项目交接
 
-> 写于 2026-10-08。给"下一个接手的 AI/人"看：现状、这一大轮做了什么、坑在哪、下一步做什么。
+> 写于 2026-10-08，最后同步 2026-10-10（补 MCP / Skills / pi 会话树 / 聊天体验 LobeHub 化）。给"下一个接手的 AI/人"看：现状、这一大轮做了什么、坑在哪、下一步做什么。
 > 仓库级守则见 `AGENTS.md`；人读指南见 `docs/replica/`（先读 `03 复刻蓝图`、`04 路线图`）；领域细节见 `.agents/skills/`。
 
 ## 1. 这是什么
@@ -16,15 +16,15 @@
 | 数据库 | SQLite + Drizzle（`data/app.db`，不入库） |
 | UI | `@lobehub/ui` + `@lobehub/icons`（MIT）+ antd |
 
-规模参考：113 个跟踪文件、约 5.9k 行 TS/TSX。
+规模参考（2026-10-10）：188 个跟踪文件、约 14.5k 行 TS/TSX。
 
 ## 2. 现在在哪（进度）
 
 - **阶段 0~4 全部完成**：骨架 + 主题动画 · 流式聊天 · SQLite 持久化 · Agent 管理 · 打磨（三态/启动占位/响应式）
-- **阶段 5 进行中**：✅ **L2-11 工具调用**（内置工具 + 工具卡片 + 开关）；✅ **L2-15 导出/备份**（侧栏导出 .md/.json）；✅ **提问栏对齐**（跨会话 island + 徽章 + 注册表兜底 + "全部同意"位）；✅ **L2-9 图片附件**（图片发给 AI：内置模型多模态 + pi 传图，2026-10-09）；⏭️ 用户明确**跳过 L2-10 图片生成**
-- **额外（超出原路线图）**：**外部 CLI Agent** 深度集成（pi / opencode / claude），尤其是 **pi**：
-  思考流、工具卡片、todo 清单、question 提问、工具开关；**上下文压缩**（会话太长把旧历史压成滚动摘要，
-  内置模型与 CLI 都走我们的压缩，工具栏 chip 可看占用/手动压/撤销）
+- **阶段 5 进行中**：✅ **L2-11 工具调用**（内置工具 + 工具卡片 + 开关）；✅ **L2-15 导出/备份**（侧栏导出 .md/.json）；✅ **L2-9 附件**（图片多模态 + 纯文本 + Office/PDF 抽文本）；✅ **MCP（L2-12）+ Agent Skills**（2026-10-10：`/mcp` 配置页 + `/skills` 只读页）；✅ **思考等级切换**（能力门 + 工具栏 chip）；✅ **提问栏对齐**（跨会话 island + 徽章 + 注册表兜底 + "全部同意"位）；🚧 **聊天体验 LobeHub 化**（2026-10-10，进行中：消息编辑 / 斜杠命令 / 输入历史 / 草稿持久化 /「过程」折叠 / 助手消息头 / 钉顶滚动 / 流式指示 / 页头标题 +「⋯」菜单 / 删除确认统一——已落地，**过程还在迭代**）；⏭️ 用户明确**跳过 L2-10 图片生成**
+- **额外（超出原路线图）**：**外部 CLI Agent** 深度集成（pi / opencode / claude）：描述符目录 + 安装检测、CLI 输出统一 AgentEvent + 薄 adapter；尤其是 **pi**：
+  RPC 模式、思考流、工具卡片 + 开关、todo 清单、question 对话、**上下文压缩**（会话太长把旧历史压成滚动摘要，
+  内置模型与 CLI 都走我们的压缩，工具栏 chip 可看占用/手动压/撤销）、**会话树与分支**（topic ↔ pi session，历史交给 pi，按分支渲染对话，生命周期对齐）
 
 ## 3. 最近这一大轮做了什么（按主题，带 commit）
 
@@ -48,6 +48,9 @@
 | 压缩阈值按模型 | `3e2eae1` `64fee06` | 阈值改为**模型上下文窗口的 80%**：`lib/llm/modelContext.ts` 按模型识别窗口（env > pi models.json 的 `contextWindow` > 内置 `/models` 的 `max_model_len` > 兜底 32768）；压缩后水位 `min(base×1.3, 窗口×90%)` |
 | 技能（Agent Skills） | `b1b8b23` `54110ed` | 本地 `data/skills/<id>/SKILL.md`：模型只看「目录」（name+描述），命中后加载正文（渐进式披露）。内置走 `activate_skill` 工具，CLI 给 SKILL.md 路径由 pi 自己 read；只读技能页 `/skills` + 侧栏入口。见 `.agents/skills/skills-and-mcp` |
 | MCP（Streamable HTTP） | `98ed70d` | 依赖 `@modelcontextprotocol/sdk`；`mcp_servers` 表（迁移 0010）+ `lib/mcp/`（client 缓存+超时、工具转 AI SDK tool，名字 `mcp__<server>__<tool>`）；内置分支并进 tools；配置页 `/mcp` + 侧栏入口。见 `.agents/skills/skills-and-mcp` |
+| 外部 CLI 描述符目录 + AgentEvent | `7ab14f0` `b0811c1` `40b69a1` | 学 LobeHub 异构接入：pi / opencode / claude 描述符目录 + 安装检测（`lib/llm/heteroAgents.ts` / `cliDetect.ts`）；所有外部 CLI 输出统一 AgentEvent + 薄 adapter（`lib/llm/agentEvents.ts` / `adapters.ts`） |
+| pi 会话树与分支（S3~S6） | `d8cc6ce` `d4a0d00` `67f6c39` `34fd3d1` `5577a54` `0beb51e` | 持久化：topic ↔ pi session，历史交给 pi（重载从 pi 拉）→ S3：会话树面板 + 同 topic 内分支（会话客户端 + `navigateTree` 扩展 + 树/导航接口）→ S4：pi 主题按当前分支渲染对话 → S5：上下文用量改用 `get_session_stats` → S6：会话生命周期对齐 |
+| 聊天体验 LobeHub 化（进行中） | `6090da6` `ea8b1d7` `77ca7a3` `b402ea4` `589b10d` `483d556` `05a2874` `ca5ca27` … `7a07753` | 一轮"过程"折叠 · 发送后钉顶滚动 · 助手消息头（头像 + 名字 + 相对时间）· 流式指示（转圈 + 操作感知文案 + 已用秒数）· 草稿持久化 · 输入历史 ↑/↓ · 斜杠命令 `/new` `/compact` · 消息动作栏单例 portal · 编辑消息（编辑并重发）· 页头标题 +「⋯」菜单 · 删除确认统一（自绘遮罩弹层）· a11y aria-label |
 
 ## 4. 关键文件地图（本轮重点）
 
@@ -61,6 +64,11 @@
 | `lib/llm/compaction.ts` | 上下文压缩：`prepareContext`（判定→滚动摘要→该发的东西）+ `loadTopicMessages`/`topicContextStats`/`withSummaryInstruction` |
 | `lib/llm/contextBudget.ts` | token 估算 + 压缩阈值/迟滞/漂移（**纯逻辑，客户端可 import**） |
 | `lib/llm/modelContext.ts` | 上下文窗口识别（env `LLM_CONTEXT_WINDOW` > pi models.json 的 `contextWindow` > 内置 `/models` 的 `max_model_len`） |
+| `lib/llm/agentEvents.ts` | 外部 CLI 输出统一为 AgentEvent + 薄 adapter |
+| `lib/llm/heteroAgents.ts` | 外部 CLI 描述符目录（pi/opencode/claude）+ 安装检测 |
+| `lib/llm/piSession.ts` | pi 会话持久化（topic ↔ pi session，历史交给 pi） |
+| `lib/llm/piBranch.ts` | pi 会话树 / 分支导航（navigateTree 扩展） |
+| `lib/llm/reasoning.ts` | 思考等级能力门（只列模型真正支持的档位）+ Agent 级切换 |
 | `lib/db/topicSummaries.ts` | 摘要表读写（`getLatestSummary`/`listSummaries`/`insertSummary`/`deleteLatestSummary`/`deleteSummariesAfter`） |
 | `app/api/topics/[id]/context/route.ts` | 上下文占用读数（GET）/ 手动压缩（POST）/ 撤销（DELETE） |
 | `features/chat/ContextMeter.tsx` | 工具栏上下文 chip + popover（占用条 / 摘要预览 / 立即压缩 / 撤销） |
@@ -79,7 +87,7 @@
 | `lib/export/topicExport.ts` | 导出纯逻辑：Markdown 渲染 / JSON 备份 / 文件名清洗 |
 | `app/api/cli-runs/[id]/answer/route.ts` | 提交"提问"的答案 |
 | `app/api/cli-runs/route.ts` | GET 跨会话 pending 列表（island/徽章的轮询口） |
-| `features/chat/` | `index.tsx`（主视图）、`ToolCard`、`ToolPicker`、`TodoPanel`、`QuestionBar`、`QuestionForm`、`PendingIsland`、`usePendingRuns`、`useAttachments`、`AttachmentPreview`、`interventions.ts` |
+| `features/chat/` | `index.tsx`（主视图）、`ToolCard`、`ToolPicker`、`TodoPanel`、`QuestionBar`、`QuestionForm`、`PendingIsland`、`usePendingRuns`、`useAttachments`、`AttachmentPreview`、`interventions.ts`、`AssistantProcess`（过程折叠）、`SessionTree`（会话树面板）、`StreamingIndicator`、`MessageActionProvider` / `MessageActions`（动作栏单例 portal）、`EffortPicker`（思考等级） |
 | `features/agent/` | Agent 列表/编辑页、`AgentAvatar`、`agentIcons`（品牌头像）、骨架 |
 | `components/` | 主题壳、启动占位、`AsyncBoundary`、骨架、`useMediaQuery` |
 | `.agents/skills/` | 领域细则（**改动相关领域前先读**：`builtin-tools`、`chat-streaming`、`agent-management`、`context-compaction`、`skills-and-mcp`、`ui-theming`、`topics-persistence`…） |
@@ -115,7 +123,6 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
 ## 7. 已知问题 / 未完成
 
 - **L2-10 图片生成**：用户明确跳过（`image-generation` skill 还在，别当成待办）。
-- **MCP（L2-12）**：未做。`ToolCard` 已能渲染 `dynamic-tool`，接入时可直接复用。
 - **提问栏对齐已做**（2026-10-08，`12ec940`）：多 pending tab（防备位）+ 跨会话 island/徽章 + 注册表兜底重建 + "全部同意"按钮位。**剩余**：
   - "全部同意"只在全部 `method === 'confirm'` 时出现，而 question 工具走 `select` → **该路径没实测过**（需要一个会发 confirm 对话的场景）；
   - **僵尸标记**：run 中途被杀（旧 bug/直接杀进程）后，DB 里留在 `input-available` 的提问片段刷新后仍渲染提问栏，提交回 404（"回答提交失败"）——旧测试会话删掉即可，要不要做"按注册表过滤标记"待定；
@@ -136,8 +143,9 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
 
 ## 8. 下一步建议（挑一个）
 
-1. **MCP 接入（L2-12）**：把 MCP server 的工具转成 `dynamicTool`，UI 复用 ToolCard；参考 `refs/lobe-chat/packages/heterogeneous-agents/src/mcp`。
-2. **个人记忆（L2-13）**：`user_memory` 表 + "我的记忆"页 + 对话前拼进提示词。
-3. **附件收尾**：扫描版 PDF 走 OCR（要装外部工具）、`public/uploads` 的清理策略（删会话时删文件？）、旧版 Office 若真要支持得装 LibreOffice。
+1. **个人记忆（L2-13）**：`user_memory` 表 + "我的记忆"页 + 对话前拼进提示词。
+2. **附件收尾**：扫描版 PDF 走 OCR（要装外部工具）、`public/uploads` 的清理策略（删会话时删文件？）、旧版 Office 若真要支持得装 LibreOffice。
+3. **断流重连**（根治"刷新页面会杀挂起的 pi"，见 §7；设计上大改）。
+4. **i18n（L2-8）**：中英双语（可选，按需）。
 
 > 工作节奏见 `vibe-coding-discipline` skill：**小步**（一次一个小功能）、随时能跑、验收后立刻 commit、约定变了先改 AGENTS.md/skill。
