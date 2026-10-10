@@ -41,7 +41,9 @@ Agent 的**运行方式**可以是「内置模型 API」或「外部 CLI」—�
 - **命令模板**（`lib/llm/cli.ts`）：
   - `{{prompt}}` → 「人设 + 对话历史 + 本次输入」（模板里没有它时，内容走 **stdin**）
   - `{{systemPrompt}}` → 人设；模板里没有它时，人设**并进 prompt 开头**
-  - 预设：Pi `pi -p --mode json --system-prompt "{{systemPrompt}}" "{{prompt}}"`、OpenCode `opencode run "{{prompt}}"`、Claude Code `claude -p --append-system-prompt "{{systemPrompt}}" "{{prompt}}"`（参考 LobeHub 的 `OPENCODE_BASE_ARGS = ['run','--format','json','--thinking','--auto']` 等）
+  - **预设的唯一来源**：`lib/llm/heteroAgents.ts` 的 `HETERO_CLI_AGENTS`（命令模板 / 图标 / 安装提示一处定义，学 LobeHub 的 `HETEROGENEOUS_AGENT_CONFIGS`）。Agent 编辑页的预设与「检测是否已安装」都读它——**改预设改这里，别在 UI 里硬编码**。Pi 走 RPC：`pi --mode rpc --system-prompt "{{systemPrompt}}"`；OpenCode 带 `XDG_DATA_HOME=%LOCALAPPDATA%\hearth`；Claude Code `claude -p --append-system-prompt "{{systemPrompt}}" "{{prompt}}"`。
+  - **安装检测**：`POST /api/cli/detect`（`lib/llm/cliDetect.ts` 的 `detectCliExecutable`，跨平台 where/which）→ 编辑页「检测是否已安装」显示路径或安装命令；spawn 失败且命令命中已知 CLI 时，错误里也带上安装提示。
+  - 注意：`lib/llm/heteroAgents.ts` **不 import node 内置模块**（客户端组件也要引用）；真正探测的 `cliDetect.ts` 才是服务端专用。
 - **思考过程（推理）**：部分 CLI 的 JSON 模式会带思考流，解析出来写成 `reasoning-delta` → UI 里的「思考过程」块。pi 的事件是 JSONL：
   - `{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"…"}}` → 推理
   - `{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"…"}}` → 正文
