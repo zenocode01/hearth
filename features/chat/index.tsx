@@ -52,8 +52,6 @@ export function ChatView() {
   const [historyAttempt, setHistoryAttempt] = useState(0);
   /** 输入框草稿（受控：支持"放回输入框"） */
   const [draft, setDraft] = useState('');
-  /** 正在编辑的消息 id（null = 没在编辑） */
-  const [editingId, setEditingId] = useState<string | null>(null);
   /** 当前草稿属于哪个会话（'new' = 还没建会话）；切会话时防串味 */
   const draftTopicRef = useRef<string | null>(null);
 
@@ -537,10 +535,6 @@ export function ChatView() {
           }
           break;
         }
-        case 'edit': {
-          setEditingId(message.id);
-          break;
-        }
         case 'delete': {
           await fetch(`/api/messages/${message.id}`, { method: 'DELETE' });
           setMessages((prev) => prev.filter((item) => item.id !== message.id));
@@ -550,50 +544,6 @@ export function ChatView() {
       }
     },
     [activeTopicId, attachments, refreshTopics, regenerate, setMessages],
-  );
-
-  /** 提交编辑：改本地 + 落库；若改的是最后一条用户消息，删掉其回复并重跑（对标 LobeHub 的"编辑并重发"）。 */
-  const handleEditSubmit = useCallback(
-    async (id: string, nextText: string) => {
-      setEditingId(null);
-      const trimmed = nextText.trim();
-      if (!trimmed) return;
-
-      setMessages((prev) =>
-        prev.map((item) => {
-          if (item.id !== id) return item;
-          const files = item.parts.filter((part) => part.type === 'file');
-          return { ...item, parts: [{ text: trimmed, type: 'text' as const }, ...files] };
-        }),
-      );
-      try {
-        await fetch(`/api/messages/${id}`, {
-          body: JSON.stringify({ content: trimmed }),
-          headers: { 'content-type': 'application/json' },
-          method: 'PATCH',
-        });
-      } catch {
-        toast.error('保存失败');
-      }
-
-      // 是最后一条用户消息 → 删掉其后的助手回复并重跑
-      const lastUser = [...messages].reverse().find((item) => item.role === 'user');
-      if (lastUser?.id !== id) return;
-      const userIndex = messages.findIndex((item) => item.id === id);
-      const reply = messages.slice(userIndex + 1).find((item) => item.role === 'assistant');
-      if (!reply) return;
-      await fetch(`/api/messages/${reply.id}`, { method: 'DELETE' });
-      requestStartedAtRef.current = Date.now();
-      try {
-        await regenerate({
-          body: activeTopicId ? { topicId: activeTopicId } : undefined,
-          messageId: reply.id,
-        });
-      } catch {
-        toast.error('重跑失败，可点「重新生成」');
-      }
-    },
-    [activeTopicId, messages, regenerate, setMessages],
   );
 
   const handleRetry = useCallback(async () => {
@@ -832,13 +782,9 @@ export function ChatView() {
                   assistantName={activeAgent?.name ?? '默认 Agent'}
                   busy={busy}
                   canBranch={!isPiTopic}
-                  canEdit={!isPiTopic}
-                  editing={editingId === message.id}
                   key={message.id}
                   message={message}
                   onAction={(target, key) => void handleMessageAction(target, key)}
-                  onEditCancel={() => setEditingId(null)}
-                  onEditSubmit={(id, text) => void handleEditSubmit(id, text)}
                   startedAt={
                     message.role === 'assistant' && index === messages.length - 1
                       ? (requestStartedAtRef.current ?? undefined)
