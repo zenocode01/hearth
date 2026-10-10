@@ -579,6 +579,43 @@ export function ChatView() {
     setSpacerHeight(0);
   }, [attachments, clearError, keepStream, setMessages, stop]);
 
+  /** 斜杠命令（对标 LobeHub）：/new 新建对话、/compact 压缩当前会话 */
+  const slashCommands = useMemo(
+    () => [
+      { description: '新建对话', name: 'new' },
+      { description: '压缩当前会话上下文', name: 'compact' },
+    ],
+    [],
+  );
+
+  const handleCommand = useCallback(
+    (name: string) => {
+      if (name === 'new') {
+        handleCreate();
+        return;
+      }
+      if (name === 'compact') {
+        if (!activeTopicId) {
+          toast.info('先在当前会话里聊几句，再压缩');
+          return;
+        }
+        void fetch(`/api/topics/${activeTopicId}/context`, { method: 'POST' })
+          .then(async (res) => {
+            const data = (await res.json()) as {
+              compacted?: boolean;
+              error?: string;
+              reason?: string;
+            };
+            if (!res.ok) toast.error(data.error ?? '压缩失败');
+            else if (data.compacted) toast.success('已压缩上下文');
+            else toast.info(data.reason ?? '没有需要压缩的内容');
+          })
+          .catch(() => toast.error('压缩请求失败'));
+      }
+    },
+    [activeTopicId, handleCreate],
+  );
+
   const handleSelect = useCallback(
     (id: string) => {
       if (id === activeTopicId) return;
@@ -861,7 +898,9 @@ export function ChatView() {
             ) : null
           }
           contextMeter={<ContextMeter refreshKey={messages.length} topicId={activeTopicId} />}
+          commands={slashCommands}
           history={inputHistory}
+          onCommand={handleCommand}
           value={draft}
           onChange={setDraft}
           onSend={() => void handleSend()}
