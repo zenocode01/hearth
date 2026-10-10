@@ -3,8 +3,7 @@
 import { useChat } from '@ai-sdk/react';
 import { Button, Flexbox, Icon, Text, copyToClipboard } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
-import { ThinkIcon } from '@lobehub/ui/icons';
-import type { UIMessage } from 'ai';
+import { isToolUIPart, type UIMessage } from 'ai';
 import { PanelLeft, Paperclip } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -30,6 +29,7 @@ import { MessageSkeleton } from './MessageSkeleton';
 import { PendingIsland } from './PendingIsland';
 import { QuestionBar } from './QuestionBar';
 import { SessionTree } from './SessionTree';
+import { StreamingIndicator } from './StreamingIndicator';
 import { TodoPanel } from './TodoPanel';
 import { ToolPicker } from './ToolPicker';
 import { TopicSidebar } from './TopicSidebar';
@@ -159,6 +159,14 @@ export function ChatView() {
           (part.type === 'text' || part.type === 'reasoning') && part.text.trim().length > 0,
       )
     );
+  // 流式文案：正在调工具 / 正在思考（对标 LobeHub 的操作感知文案）
+  const streamingTool =
+    lastMessage?.role === 'assistant' &&
+    lastMessage.parts.some(
+      (part) =>
+        isToolUIPart(part) && (part.state === 'input-available' || part.state === 'input-streaming'),
+    );
+  const streamLabel = streamingTool ? '正在调用工具' : '正在思考';
 
   // 当前会话是不是 pi（RPC）主题：是的话历史归 pi 管、分支走会话树面板、消息动作里隐藏「分支」
   const activeAgent = useMemo(
@@ -710,18 +718,10 @@ export function ChatView() {
               ))
             )}
             {waitingFirstToken && (
-              <span
-                className="hearth-thinking"
-                style={{
-                  alignItems: 'center',
-                  color: 'var(--ant-color-text-secondary, rgba(0, 0, 0, 0.45))',
-                  display: 'inline-flex',
-                  gap: 6,
-                }}
-              >
-                <Icon icon={ThinkIcon} size={14} />
-                模型思考中…
-              </span>
+              <StreamingIndicator
+                label={streamLabel}
+                startedAt={requestStartedAtRef.current ?? undefined}
+              />
             )}
             {/* 发送后「钉顶」的底部占位（学 LobeHub 的 spacer）：用户消息停在顶部、助手在下方填充 */}
             {spacerHeight > 0 && (
