@@ -45,6 +45,9 @@
 | 提问栏对齐 | `12ec940` | 注册表 v2（`topicId/input/method` + `listPendingQuestions`）+ `GET /api/cli-runs` 轮询（`usePendingRuns` 3s）→ **跨会话 island**（`PendingIsland`：chip+Popover+条件"全部同意"）+ 侧栏 ❓ 徽章；`QuestionBar` 收数组（>1 渲染 tab）、`mergePendingQuestions` 注册表兜底（切走/刷新后重建）；**切会话 `keepStream` 不 stop 挂起流** + `streamBlocked` 不算 busy；仓外修复 `~/.pi/agent/extensions/question.ts` 放行 rpc（`ctx.ui.select`） |
 | 上下文压缩 | `54b98db` `b0d6770` `add2f23` `90de601` `6d580fa` `3ec6105` | 会话太长把**旧历史压成滚动摘要**（原消息不删，只改发给模型的那份）；`topic_summaries` + 水位线 `throughMessageId`；阈值 = **模型上下文窗口的 80%**（按模型识别，见 `lib/llm/modelContext.ts`）；迟滞(压缩后 ×1.3 且不超窗口 90%)/漂移(×1.2) 见 `lib/llm/contextBudget.ts`；摘要器**学 pi 的 compaction**（结构化 checkpoint：目标/约束/进度/决策/下一步/上下文 + 滚动更新指令）；**内置模型与外部 CLI（pi）都走我们的压缩**（CLI 摘要拼进 prompt，事实来源仍是 DB）；工具栏 `ContextMeter` chip（占用条 + 摘要预览 + 立即压缩 / 撤销最近一次）。踩坑与验法见 `.agents/skills/context-compaction` |
 | pi 流式修复 | `6f311e1` | pi RPC 事件要攒到整轮结束才显示：stdout 处理**只在 agent_settled/dialog 时 wake**，普通增量一直不被消费 → 每段 stdout 都 `wake()` |
+| 压缩阈值按模型 | `3e2eae1` `64fee06` | 阈值改为**模型上下文窗口的 80%**：`lib/llm/modelContext.ts` 按模型识别窗口（env > pi models.json 的 `contextWindow` > 内置 `/models` 的 `max_model_len` > 兜底 32768）；压缩后水位 `min(base×1.3, 窗口×90%)` |
+| 技能（Agent Skills） | `b1b8b23` `54110ed` | 本地 `data/skills/<id>/SKILL.md`：模型只看「目录」（name+描述），命中后加载正文（渐进式披露）。内置走 `activate_skill` 工具，CLI 给 SKILL.md 路径由 pi 自己 read；只读技能页 `/skills` + 侧栏入口。见 `.agents/skills/skills-and-mcp` |
+| MCP（Streamable HTTP） | `98ed70d` | 依赖 `@modelcontextprotocol/sdk`；`mcp_servers` 表（迁移 0010）+ `lib/mcp/`（client 缓存+超时、工具转 AI SDK tool，名字 `mcp__<server>__<tool>`）；内置分支并进 tools；配置页 `/mcp` + 侧栏入口。见 `.agents/skills/skills-and-mcp` |
 
 ## 4. 关键文件地图（本轮重点）
 
@@ -61,6 +64,9 @@
 | `lib/db/topicSummaries.ts` | 摘要表读写（`getLatestSummary`/`listSummaries`/`insertSummary`/`deleteLatestSummary`/`deleteSummariesAfter`） |
 | `app/api/topics/[id]/context/route.ts` | 上下文占用读数（GET）/ 手动压缩（POST）/ 撤销（DELETE） |
 | `features/chat/ContextMeter.tsx` | 工具栏上下文 chip + popover（占用条 / 摘要预览 / 立即压缩 / 撤销） |
+| `lib/skills/` | Agent Skills：`store.ts`（扫 `data/skills/`）+ `agent.ts`（`<available_skills>` 提示词 + `activate_skill` 工具） |
+| `lib/mcp/` | MCP：`client.ts`（Streamable HTTP + 缓存/超时）+ `tools.ts`（转 AI SDK tool，`mcp__<server>__<tool>`） |
+| `lib/db/mcpServers.ts` | MCP server 配置读写（`mcp_servers` 表，迁移 0010） |
 | `lib/tools/settings.ts` | 工具开关纯逻辑（**不 import `ai`**，客户端可用） |
 | `lib/db/messageParts.ts` | 消息片段与 AI SDK 的双向映射（刻意解耦，SDK 升级不污染历史；含 file 附件片段） |
 | `lib/files/constants.ts` | 附件类型白名单/体积上限/`accept`（**纯常量，客户端可 import**） |
@@ -76,7 +82,7 @@
 | `features/chat/` | `index.tsx`（主视图）、`ToolCard`、`ToolPicker`、`TodoPanel`、`QuestionBar`、`QuestionForm`、`PendingIsland`、`usePendingRuns`、`useAttachments`、`AttachmentPreview`、`interventions.ts` |
 | `features/agent/` | Agent 列表/编辑页、`AgentAvatar`、`agentIcons`（品牌头像）、骨架 |
 | `components/` | 主题壳、启动占位、`AsyncBoundary`、骨架、`useMediaQuery` |
-| `.agents/skills/` | 领域细则（**改动相关领域前先读**：`builtin-tools`、`chat-streaming`、`agent-management`、`context-compaction`、`ui-theming`、`topics-persistence`…） |
+| `.agents/skills/` | 领域细则（**改动相关领域前先读**：`builtin-tools`、`chat-streaming`、`agent-management`、`context-compaction`、`skills-and-mcp`、`ui-theming`、`topics-persistence`…） |
 
 ## 5. 环境与坑（必读）
 

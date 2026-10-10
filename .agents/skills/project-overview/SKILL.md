@@ -42,7 +42,7 @@ React UI → features/ 里的 action/service → app/api 路由 → lib/llm prov
 - [x] 阶段 3 · Agent 管理 —— ✅ 2026-10 agents 表 + `/agents` 列表/编辑页 + 聊天页选择器；同一问题两个人设回答风格明显不同，改人设立即生效
 - [x] 附加 · 外部 CLI Agent（超出原路线图）—— ✅ 2026-10 pi / opencode / claude 命令模板 + pi JSONL 思考流解析 + 品牌头像（`@lobehub/icons`，`avatar = icon:<key>`）
 - [x] 阶段 4 · 打磨 —— ✅ 2026-10 主题（深浅色 + 切换动画）· 三态（启动占位 / 骨架 / 错误可重试，`AsyncBoundary`）· 移动端响应式（侧栏抽屉 / 主题控件收起 / 表单竖排 / 安全区）。**i18n 与导出未做（路线上是"挑你要的"，暂缓）**
-- [ ] 阶段 5 · 扩展（按 03 勾选表）—— 进行中：✅ **L2-11 工具调用**（2026-10：计算器 / 当前时间 / 抓网页三个内置工具 + 聊天里的工具卡片 + 片段落库，见 `builtin-tools` skill）；✅ **上下文压缩**（2026-10：会话太长把旧历史压成滚动摘要，内置与 CLI 都走我们的压缩，工具栏 chip 可看占用/手动压/撤销，见 `context-compaction` skill）；⏭️ 用户明确**跳过 L2-10 图片生成**
+- [ ] 阶段 5 · 扩展（按 03 勾选表）—— 进行中：✅ **L2-11 工具调用**（2026-10：计算器 / 当前时间 / 抓网页三个内置工具 + 聊天里的工具卡片 + 片段落库，见 `builtin-tools` skill）；✅ **上下文压缩**（2026-10：会话太长把旧历史压成滚动摘要，内置与 CLI 都走我们的压缩，工具栏 chip 可看占用/手动压/撤销，见 `context-compaction` skill）；✅ **MCP（L2-12）** 与 **Agent Skills**（2026-10：外部 MCP server 工具并入 + 本地 SKILL.md 按需加载，见 `skills-and-mcp` skill）；⏭️ 用户明确**跳过 L2-10 图片生成**
 
 ## 蓝图导航
 
