@@ -147,6 +147,7 @@ export function AgentList() {
                   danger
                   icon={Trash2}
                   size={{ blockSize: 28, size: 16 }}
+                  style={{ color: 'var(--ant-color-error, #ec5e41)' }}
                   title="删除"
                   onClick={() =>
                     confirmDelete({

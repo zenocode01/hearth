@@ -159,6 +159,7 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
             danger
             icon={Trash2}
             size={{ blockSize: 28, size: 14 }}
+            style={{ color: 'var(--ant-color-error, #ec5e41)' }}
             title="删除"
             onClick={(event) => {
               event.stopPropagation();
