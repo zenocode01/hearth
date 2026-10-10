@@ -24,7 +24,8 @@ import { listEnabledConfigs } from '@/lib/db/mcpServers';
 import { buildMcpTools } from '@/lib/mcp/tools';
 import { buildSkillTools, buildSkillsPrompt } from '@/lib/skills/agent';
 import { listSkills } from '@/lib/skills/store';
-import { buildCliPrompt, runCliAgent, type CliChunk } from '@/lib/llm/cli';
+import type { AgentEvent } from '@/lib/llm/agentEvents';
+import { buildCliPrompt, runCliAgent } from '@/lib/llm/cli';
 import { createRun, endRun, waitForQuestion } from '@/lib/llm/cliRuns';
 import { buildPiToolFlags, isPiCommand } from '@/lib/llm/piTools';
 import { runPiRpcAgent } from '@/lib/llm/piRpc';
@@ -247,7 +248,7 @@ export async function POST(req: Request) {
         let pendingQuestion: { input?: unknown; toolCallId: string } | null = null;
 
         /** 按片段类型懒开启对应的 part（CLI 的思考与正文可能交错到达）。 */
-        const writeChunk = (chunk: CliChunk) => {
+        const writeChunk = (chunk: AgentEvent) => {
           // 工具调用：pi 自带的 read/bash/edit/... 会变成聊天里的工具卡片
           if (chunk.kind === 'tool') {
             const { tool } = chunk;

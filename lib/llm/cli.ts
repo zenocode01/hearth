@@ -3,8 +3,10 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { checkPiRuntime, looksLikePiCommand, piEnvExtra } from './piEnv';
+import { detectAdapter, textAdapter, type AgentAdapter } from './adapters';
+import { stripAnsi, type AgentEvent } from './agentEvents';
 import { heteroAgentOfCommand } from './heteroAgents';
+import { checkPiRuntime, looksLikePiCommand, piEnvExtra } from './piEnv';
 
 /**
  * 外部 CLI agent 运行器（参考 refs 的 heterogeneous agents，取其最小可用子集）。
@@ -16,6 +18,9 @@ import { heteroAgentOfCommand } from './heteroAgents';
  *
  * 注意：这里**不走 shell**——自己把模板拆成 argv 再 spawn，
  * 占位符作为独立参数传递，因此用户输入不会被当成 shell 语法执行。
+ *
+ * 输出解析：协议差异收敛在 `lib/llm/adapters.ts`——运行器只管把 stdout 喂给探测到的
+ * adapter，统一产出 `AgentEvent`（思考 / 正文 / 工具）。加协议 = 加 adapter，这里不用改。
  */
 
 /** 把命令模板拆成 argv（支持单/双引号），占位符原样保留。 */
@@ -194,180 +199,6 @@ export function buildCliInvocation({ command, prompt, systemPrompt }: CliRunOpti
   };
 }
 
-/** CLI 输出的一个片段：正文 / 思考 / 工具调用。 */
-export type CliChunk =
-  | { delta: string; kind: 'reasoning' | 'text' }
-  | {
-      kind: 'tool';
-      tool: {
-        /** 工具名（pi 自带的：read / bash / edit / write / grep / find / ls / powershell…） */
-        name: string;
-        /** 工具调用 id（输入与结果配对用） */
-        toolCallId: string;
-        /** input-available：参数已到齐；output-available / output-error：执行结果 */
-        state: 'input-available' | 'output-available' | 'output-error';
-        /** 工具自带的展示元信息（pi 扩展的 details，如 todo 清单） */
-        details?: unknown;
-        errorText?: string;
-        input?: unknown;
-        output?: string;
-      };
-    };
-
-/** 去掉 ANSI 转义序列（很多 CLI 报错时会带颜色码，直接展示会变成乱码）。 */
-const ANSI_ESCAPE =
-  // eslint-disable-next-line no-control-regex
-  /[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g;
-
-function stripAnsi(value: string): string {
-  return value.replace(ANSI_ESCAPE, '');
-}
-
-/**
- * 把 pi 的模型错误（`message_end` 的 `errorMessage`）翻译成人话。
- * 失败必须有可读提示（验收项）——401 直接告诉用户去改哪里，而不是甩一段 JSON。
- */
-export function humanizePiError(errorMessage: string): string {
-  const detail = errorMessage.replace(/\s+/g, ' ').trim().slice(0, 300);
-  const status = /^\s*(\d{3})\b/.exec(detail)?.[1];
-
-  if (status === '401' || status === '403') {
-    return `模型服务拒绝了请求（${status}）：pi 的 API key 不对或已过期，检查 ~/.pi/agent/models.json 里该 provider 的 apiKey。`;
-  }
-  if (status === '404') {
-    return `接口或模型不存在（404）：检查 pi provider 的 baseUrl 与模型 id。${detail}`;
-  }
-  if (status === '429') {
-    return '请求过于频繁或额度不足（429）：请稍后重试。';
-  }
-  return detail || '未知错误';
-}
-
-/**
- * 把 pi 的一行 JSON 事件映射成片段；不是事件（不是 JSON 或没有 type 字段）时返回 null。
- *
- * 注意：pi 的事件类型会增长（session / agent_start / turn_start / message_* /
- * turn_end / agent_end / tool_* …），所以**不做类型白名单**——凡是带 type 的 JSON
- * 行都当协议事件；只有 message_update 里的 delta 才是给用户看的内容，其余一律丢弃。
- * 否则新的事件类型会整段漏进正文（踩过：turn_end / agent_end）。
- *
- * 也被 RPC 模式复用（`lib/llm/piRpc.ts`）——两种模式共享同一套会话事件。
- */
-export function parsePiEvent(line: string): CliChunk[] | null {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith('{')) return null;
-
-  let event: {
-    assistantMessageEvent?: {
-      delta?: unknown;
-      toolCall?: { arguments?: unknown; id?: unknown; name?: unknown };
-      type?: unknown;
-    };
-    error?: { message?: unknown };
-    message?: {
-      content?: Array<{ text?: unknown; type?: unknown }>;
-      details?: unknown;
-      errorMessage?: unknown;
-      isError?: unknown;
-      role?: unknown;
-      stopReason?: unknown;
-      toolCallId?: unknown;
-      toolName?: unknown;
-    };
-    type?: unknown;
-  };
-  try {
-    event = JSON.parse(trimmed);
-  } catch {
-    return null;
-  }
-  if (typeof event?.type !== 'string') return null;
-
-  if (event.type === 'message_update') {
-    const update = event.assistantMessageEvent;
-
-    // 工具调用：参数流完了（toolcall_end 带完整 arguments）
-    if (update?.type === 'toolcall_end') {
-      const call = update.toolCall;
-      if (typeof call?.id === 'string' && typeof call.name === 'string') {
-        return [
-          {
-            kind: 'tool',
-            tool: {
-              input: call.arguments,
-              name: call.name,
-              state: 'input-available',
-              toolCallId: call.id,
-            },
-          },
-        ];
-      }
-      return [];
-    }
-
-    const delta = typeof update?.delta === 'string' ? update.delta : '';
-    if (!delta) return [];
-    if (update?.type === 'thinking_delta') return [{ delta, kind: 'reasoning' }];
-    if (update?.type === 'text_delta') return [{ delta, kind: 'text' }];
-    return [];
-  }
-
-  // 工具结果：pi 会发一条 role=toolResult 的消息（message_end 是权威值）
-  if (event.type === 'message_end' && event.message?.role === 'toolResult') {
-    const { message } = event;
-    if (typeof message.toolCallId !== 'string' || typeof message.toolName !== 'string') return [];
-
-    const text = (message.content ?? [])
-      .map((block) => (block.type === 'text' && typeof block.text === 'string' ? block.text : ''))
-      .join('')
-      .trim();
-    const isError = message.isError === true;
-
-    return [
-      {
-        kind: 'tool',
-        tool: {
-          // pi 扩展的 details（如 todo 的完整清单）——给 UI 渲染专属卡片
-          details: message.details,
-          errorText: isError ? text || '工具执行失败' : undefined,
-          name: message.toolName,
-          output: isError ? undefined : text.slice(0, 4000),
-          state: isError ? 'output-error' : 'output-available',
-          toolCallId: message.toolCallId,
-        },
-      },
-    ];
-  }
-
-  // 模型出错：assistant 的 message_end 带 stopReason=error + errorMessage（如 key 失效的 401）。
-  // 必须透出到正文，否则界面只剩一个空回复（踩过：401 静默，用户只看到"没有输出"）。
-  if (event.type === 'message_end' && event.message?.role === 'assistant') {
-    const { message } = event;
-    if (typeof message.errorMessage === 'string' && message.errorMessage.trim()) {
-      return [
-        { delta: `\n\n> ⚠️ pi 调用模型失败：${humanizePiError(message.errorMessage)}`, kind: 'text' },
-      ];
-    }
-    return [];
-  }
-
-  if (event.type === 'error') {
-    const message =
-      typeof event.error?.message === 'string' ? event.error.message : 'CLI 报告了一个错误';
-    return [{ delta: `\n\n> 错误：${message}`, kind: 'text' }];
-  }
-
-  // 其它协议事件（session / turn_start / turn_end / message_start / agent_end …）不产生可见内容
-  return [];
-}
-
-/** 收尾：把没有换行结尾的残留按当前协议处理（TS 看不到闭包内的赋值，故用参数传入）。 */
-function finalizeChunk(value: string, mode: 'pi-json' | 'text' | 'unknown'): CliChunk[] {
-  // pi-json 模式下残留也不是给用户看的内容
-  if (mode === 'pi-json') return parsePiEvent(value) ?? [];
-  return [{ delta: value, kind: 'text' }];
-}
-
 /** 失败时带上诊断信息（文件、参数概要、长度），便于定位 EINVAL/ENOENT 这类问题。 */
 function describeCommand(file: string, args: string[]): string {
   const longest = args.reduce((max, arg) => Math.max(max, arg.length), 0);
@@ -379,8 +210,8 @@ function describeCommand(file: string, args: string[]): string {
   return `file=${file}; args=[${preview}${more}]; 最长参数 ${longest} 字符`;
 }
 
-/** 运行 CLI，把 stdout 按「纯文本」或「pi JSONL 协议」解析成片段。 */
-export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliChunk> {
+/** 运行 CLI，把 stdout 按协议（pi JSONL / 纯文本）解析成统一事件 `AgentEvent`。 */
+export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<AgentEvent> {
   const invocation = buildCliInvocation(options);
   const { args, file } = resolveCliCommand(invocation.file, invocation.args);
   const stdin = invocation.stdin;
@@ -458,13 +289,14 @@ export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliCh
     wake();
   });
 
-  // 输出解析状态机：先看第一行是不是 pi 的 JSONL 事件，认识就按协议解析，否则整条按纯文本
-  let protocol: 'pi-json' | 'text' | 'unknown' = 'unknown';
+  // 协议由第一个非空行决定（见 adapters.ts）：先试结构化 JSONL，再兜底纯文本。
+  // 一旦确定是"非按行"协议（纯文本），后续整段直接当正文，保证流式。
+  let adapter: AgentAdapter | null = null;
   let buffer = '';
 
-  function* processChunk(chunk: string): Generator<CliChunk> {
-    if (protocol === 'text') {
-      yield { delta: stripAnsi(chunk), kind: 'text' };
+  function* processChunk(chunk: string): Generator<AgentEvent> {
+    if (adapter && !adapter.lineBased) {
+      yield* adapter.parse(chunk);
       return;
     }
 
@@ -475,26 +307,20 @@ export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliCh
     for (const line of lines) {
       if (!line.trim()) continue;
 
-      if (protocol === 'unknown') {
-        const parsed = parsePiEvent(line);
-        if (parsed) {
-          protocol = 'pi-json';
-          yield* parsed;
+      if (!adapter) {
+        adapter = detectAdapter(line);
+        if (!adapter.lineBased) {
+          // 第一行不是已知事件 → 整个输出按纯文本；把已攒的也吐出去
+          yield* adapter.parse(`${line}\n`);
+          if (buffer) {
+            yield* adapter.parse(buffer);
+            buffer = '';
+          }
           continue;
         }
-        // 第一行就不是已知事件 → 整个输出按纯文本处理
-        protocol = 'text';
-        yield { delta: `${line}\n`, kind: 'text' };
-        if (buffer) {
-          yield { delta: buffer, kind: 'text' };
-          buffer = '';
-        }
-        continue;
       }
 
-      const parsed = parsePiEvent(line);
-      // pi-json 模式下正文只来自 message_update 的 delta；其它原始行（协议事件）一律丢弃
-      if (parsed) yield* parsed;
+      yield* adapter.parse(line);
     }
   }
 
@@ -508,9 +334,9 @@ export async function* runCliAgent(options: CliRunOptions): AsyncGenerator<CliCh
       });
     }
 
-    // 收尾：把没有换行结尾的残留吐出去
+    // 收尾：把没有换行结尾的残留按当前协议处理（没定过协议就当纯文本）
     if (buffer) {
-      yield* finalizeChunk(buffer, protocol);
+      yield* (adapter ?? textAdapter).parse(buffer);
     }
   } finally {
     options.signal?.removeEventListener('abort', kill);

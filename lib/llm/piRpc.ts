@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 
-import { buildCliInvocation, parsePiEvent, resolveCliCommand, type CliChunk } from './cli';
+import { parsePiEvent, type AgentEvent } from './agentEvents';
+import { buildCliInvocation, resolveCliCommand } from './cli';
 import { checkPiRuntime, piEnvExtra } from './piEnv';
 import { normalizeReasoningEffort } from './reasoning';
 
@@ -49,7 +50,7 @@ export interface PiRpcOptions {
 const DIALOG_METHODS = new Set(['confirm', 'editor', 'input', 'select']);
 
 /** 运行 pi（RPC 模式），把会话事件与工具事件解析成片段。 */
-export async function* runPiRpcAgent(options: PiRpcOptions): AsyncGenerator<CliChunk> {
+export async function* runPiRpcAgent(options: PiRpcOptions): AsyncGenerator<AgentEvent> {
   const invocation = buildCliInvocation({
     command: options.command,
     prompt: options.prompt,
