@@ -18,6 +18,10 @@ interface Stats {
   keepRecentTurns: number;
   limit: number;
   messageCount: number;
+  /** pi 主题才有：pi 自己算的占用百分比（刚压缩完为 null） */
+  percent?: number | null;
+  /** 'pi' = 上下文由 pi 管（数字来自 get_session_stats），其余走我们自己的估算 */
+  runtime?: string;
   summaryCount: number;
   summaries: SummaryRow[];
   threshold: number;
@@ -31,23 +35,25 @@ interface ContextMeterProps {
 }
 
 /** 4 位数以下直接显示，以上用 k（chip 空间小，别把操作栏挤爆） */
-function formatTokens(value: number): string {
+function formatTokens(value: number | null | undefined): string {
+  if (value == null) return '—';
   return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(value);
 }
 
 /**
  * 上下文占用读数 + 手动压缩入口（工具栏 chip，风格与 ToolPicker / EffortPicker 一致）。
  *
- * 为什么要露出来：压缩是"调模型前"自动发生的，用户看不见就会以为 AI 突然失忆。
- * 这里给出三件事——现在占多少、什么时候会压、以及"现在就压"的按钮。
- *
- * 内置模型与外部 CLI（pi 等）都适用：CLI 会话也走我们自己的压缩（事实来源是 DB）。
+ * 两条链路：
+ * - 内置模型：走我们自己的估算与压缩（prepareContext）；
+ * - pi 主题：数字来自 pi 的 `get_session_stats`，压缩交回 pi 的 `compact`。
  */
 export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps) => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [status, setStatus] = useState<'error' | 'loading' | 'ready'>('loading');
   const [open, setOpen] = useState(false);
   const [compacting, setCompacting] = useState(false);
+
+  const isPi = stats?.runtime === 'pi';
 
   const load = useCallback(async () => {
     if (!topicId) {
@@ -79,12 +85,18 @@ export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps
         compacted?: boolean;
         compressedCount?: number;
         error?: string;
+        estimatedTokensAfter?: number;
         reason?: string;
+        tokensBefore?: number;
       };
       if (!res.ok) {
         toast.error(data.error ?? '压缩失败，请稍后重试');
       } else if (data.compacted) {
-        toast.success(`已压缩 ${data.compressedCount ?? 0} 条历史`);
+        toast.success(
+          data.runtime === 'pi'
+            ? `pi 已压缩（${formatTokens(data.tokensBefore)} → ${formatTokens(data.estimatedTokensAfter)} tokens）`
+            : `已压缩 ${data.compressedCount ?? 0} 条历史`,
+        );
       } else {
         toast.info(data.reason ?? '没有需要压缩的内容');
       }
@@ -103,13 +115,13 @@ export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps
     setCompacting(true);
     try {
       const res = await fetch(`/api/topics/${topicId}/context`, { method: 'DELETE' });
-      const data = (await res.json()) as Stats & { error?: string; removed?: boolean };
+      const data = (await res.json()) as Stats & { error?: string; reason?: string; removed?: boolean };
       if (!res.ok) {
         toast.error(data.error ?? '撤销失败，请稍后重试');
       } else if (data.removed) {
         toast.success('已撤销最近一次压缩');
       } else {
-        toast.info('没有可撤销的压缩记录');
+        toast.info(data.reason ?? '没有可撤销的压缩记录');
       }
       setStats(data);
       setStatus('ready');
@@ -122,11 +134,17 @@ export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps
 
   if (!topicId) return null;
 
-  const ratio = stats && stats.threshold > 0 ? stats.estimatedTokens / stats.threshold : 0;
+  const denominator = isPi ? (stats?.contextWindow ?? stats?.threshold ?? 0) : (stats?.threshold ?? 0);
+  const ratio =
+    isPi && stats?.percent != null
+      ? stats.percent / 100
+      : stats && denominator > 0
+        ? stats.estimatedTokens / denominator
+        : 0;
   const barColor =
-    ratio >= 1
+    ratio >= 0.9
       ? 'var(--ant-color-error, #ff4d4f)'
-      : ratio >= 0.8
+      : ratio >= 0.7
         ? 'var(--ant-color-warning, #faad14)'
         : 'var(--ant-color-primary, #1677ff)';
 
@@ -138,7 +156,9 @@ export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps
             <Text style={{ fontSize: 13, fontWeight: 600 }}>上下文占用</Text>
             <Text style={{ fontSize: 11.5 }} type="secondary">
               {status === 'ready' && stats
-                ? `${stats.estimatedTokens} / ${stats.threshold} tokens`
+                ? isPi
+                  ? `${formatTokens(stats.estimatedTokens)} / ${formatTokens(stats.contextWindow)} tokens`
+                  : `${stats.estimatedTokens} / ${stats.threshold} tokens`
                 : ''}
             </Text>
           </Flexbox>
@@ -175,15 +195,22 @@ export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps
                 />
               </div>
 
-              <Text style={{ fontSize: 11.5, lineHeight: 1.6 }} type="secondary">
-                {stats.contextWindow
-                  ? `模型窗口 ${formatTokens(stats.contextWindow)}（按 80% 取阈）；`
-                  : ''}
-                超过 {stats.threshold} tokens 时自动把旧消息压成摘要，保留最近{' '}
-                {stats.keepRecentTurns} 轮原文。原消息不删，只是不再发给模型。
-              </Text>
+              {isPi ? (
+                <Text style={{ fontSize: 11.5, lineHeight: 1.6 }} type="secondary">
+                  这是 pi 自己统计的上下文{stats.percent != null ? `（约 ${Math.round(stats.percent)}%）` : ''}。
+                  pi 会在接近上限时自动压缩，也可以点下面手动让它压一次。
+                </Text>
+              ) : (
+                <Text style={{ fontSize: 11.5, lineHeight: 1.6 }} type="secondary">
+                  {stats.contextWindow
+                    ? `模型窗口 ${formatTokens(stats.contextWindow)}（按 80% 取阈）；`
+                    : ''}
+                  超过 {stats.threshold} tokens 时自动把旧消息压成摘要，保留最近{' '}
+                  {stats.keepRecentTurns} 轮原文。原消息不删，只是不再发给模型。
+                </Text>
+              )}
 
-              {stats.summaryCount > 0 ? (
+              {!isPi && stats.summaryCount > 0 && (
                 <div
                   style={{
                     borderTop: '1px solid var(--ant-color-border-secondary, rgba(0,0,0,0.08))',
@@ -209,7 +236,8 @@ export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps
                     {stats.summaries[0]?.content}
                   </div>
                 </div>
-              ) : (
+              )}
+              {!isPi && stats.summaryCount === 0 && (
                 <Text style={{ fontSize: 11.5, opacity: 0.55 }} type="secondary">
                   还没压缩过。
                 </Text>
@@ -219,7 +247,7 @@ export const ContextMeter = memo(({ topicId, refreshKey = 0 }: ContextMeterProps
                 <Button loading={compacting} onClick={() => void compact()} size="small">
                   立即压缩
                 </Button>
-                {stats.summaryCount > 0 && (
+                {!isPi && stats.summaryCount > 0 && (
                   <Button
                     disabled={compacting}
                     onClick={() => void undo()}

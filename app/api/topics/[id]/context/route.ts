@@ -1,12 +1,13 @@
 import { eq } from 'drizzle-orm';
 
 import { getDb } from '@/lib/db';
-import { agents, topics } from '@/lib/db/schema';
+import { agents, topics, type Agent } from '@/lib/db/schema';
 import { deleteLatestSummary } from '@/lib/db/topicSummaries';
 import { createChatModel, MissingLlmConfigError } from '@/lib/llm';
 import { loadTopicMessages, prepareContext, topicContextStats } from '@/lib/llm/compaction';
 import { getContextWindow } from '@/lib/llm/modelContext';
-import { isPiCommand } from '@/lib/llm/piTools';
+import { isPiCommand, isPiRpcCommand } from '@/lib/llm/piCommand';
+import { runPiSessionCommands } from '@/lib/llm/piSession';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -20,20 +21,89 @@ function agentOf(topicId: string) {
     : null;
 }
 
+/** pi 主题：命令是不是 pi 的 RPC 模式（只有它有 get_session_stats）。 */
+function isPi(agent: Agent | null): agent is Agent & { cliCommand: string } {
+  return (
+    agent?.runtime === 'cli' &&
+    isPiCommand(agent.cliCommand) &&
+    isPiRpcCommand(agent.cliCommand)
+  );
+}
+
+interface PiStats {
+  contextWindow: number | null;
+  estimatedTokens: number;
+  keepRecentTurns: number;
+  limit: number;
+  messageCount: number;
+  percent: number | null;
+  runtime: 'pi';
+  summaryCount: number;
+  summaries: never[];
+  threshold: number;
+}
+
+/**
+ * pi 主题的真实上下文占用：`get_session_stats.contextUsage`（pi 自己算的，
+ * 用于它自己的自动压缩与 footer 显示）。拿不到就回退我们的 DB 估算。
+ */
+async function piStats(agent: Agent & { cliCommand: string }, topicId: string): Promise<PiStats> {
+  const contextWindow = await getContextWindow({ runtime: 'cli' });
+  try {
+    const [response] = await runPiSessionCommands({
+      command: agent.cliCommand,
+      requests: [{ type: 'get_session_stats' }],
+      systemPrompt: agent.systemPrompt,
+      topicId,
+    });
+    const data = response?.data as
+      | {
+          contextUsage?: { contextWindow?: number; percent?: number | null; tokens?: number | null };
+          totalMessages?: number;
+        }
+      | undefined;
+    const usage = data?.contextUsage;
+    const window = usage?.contextWindow ?? contextWindow;
+    return {
+      contextWindow: window,
+      estimatedTokens: usage?.tokens ?? 0,
+      keepRecentTurns: 0,
+      limit: 0,
+      messageCount: data?.totalMessages ?? 0,
+      percent: usage?.percent ?? null,
+      runtime: 'pi',
+      summaryCount: 0,
+      summaries: [],
+      threshold: window ?? 0,
+    };
+  } catch {
+    // pi 不在/超时：回退我们自己的估算，至少 chip 有数
+    const fallback = topicContextStats(topicId, contextWindow);
+    return {
+      ...fallback,
+      percent: null,
+      runtime: 'pi',
+      summaryCount: 0,
+      summaries: [],
+    };
+  }
+}
+
 /**
  * GET —— 上下文占用读数（工具栏 chip 用）。
  *
- * 数字与聊天路由的判定**同源**（同一套估算 + 同一套阈值），否则 UI 显示 8k、
- * 实际却触发了压缩，用户只会觉得这东西不准。
+ * pi 主题：数字来自 pi 的 `get_session_stats`（真实占用）；其余走我们自己的估算，
+ * 与聊天路由的判定同源。
  */
 export async function GET(_req: Request, { params }: Params) {
   const { id } = await params;
   const agent = agentOf(id);
   if (!agent) {
-    // agentOf 返回 null 也可能是"会话没有 Agent"（走内置默认模型），要区分
     const exists = getDb().select({ id: topics.id }).from(topics).where(eq(topics.id, id)).get();
     if (!exists) return Response.json({ error: '会话不存在' }, { status: 404 });
   }
+
+  if (isPi(agent)) return Response.json(await piStats(agent, id));
 
   const contextWindow = await getContextWindow({
     modelId: agent?.model,
@@ -47,30 +117,44 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 /**
- * POST —— 手动压缩一次（对应 chip 里的「立即压缩」）。
- *
- * 走的是与自动压缩完全相同的代码（prepareContext + force），只是跳过阈值判定。
- * 内置模型与外部 CLI（pi 等）都适用——CLI 会话也用我们自己的压缩（事实来源是 DB）。
- * 失败必须可读：这是用户主动点的按钮，静默失败最招烦。
+ * POST —— 手动压缩一次。
+ * - pi 主题：调 pi 的 `compact`（它自己的压缩，会写 compaction entry）；
+ * - 其余：走我们的 prepareContext + force。
  */
 export async function POST(_req: Request, { params }: Params) {
   const { id } = await params;
   const agent = agentOf(id);
+
+  if (isPi(agent)) {
+    try {
+      const [response] = await runPiSessionCommands({
+        command: agent.cliCommand,
+        requests: [{ type: 'compact' }],
+        systemPrompt: agent.systemPrompt,
+        topicId: id,
+      });
+      if (!response?.success) {
+        return Response.json({ error: response?.error ?? 'pi 压缩失败' }, { status: 502 });
+      }
+      const data = response.data as
+        | { estimatedTokensAfter?: number; tokensBefore?: number }
+        | undefined;
+      return Response.json({
+        ...(await piStats(agent, id)),
+        compacted: true,
+        estimatedTokensAfter: data?.estimatedTokensAfter,
+        tokensBefore: data?.tokensBefore,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return Response.json({ error: `pi 压缩失败：${message}` }, { status: 502 });
+    }
+  }
+
   const contextWindow = await getContextWindow({
     modelId: agent?.model,
     runtime: agent?.runtime === 'cli' ? 'cli' : 'api',
   });
-
-  // pi 主题的历史与压缩由 pi 自己管理（方案见 docs/analysis/pi-session-tree.md），
-  // 走我们的压缩只会写一份用不到的摘要。先明确拦下，后续会接到 pi 的 compact。
-  if (agent?.runtime === 'cli' && isPiCommand(agent.cliCommand)) {
-    return Response.json({
-      ...topicContextStats(id, contextWindow),
-      compacted: false,
-      reason: 'pi 会话的上下文由 pi 自己压缩，暂不支持在这里手动压缩。',
-      runtime: agent.runtime,
-    });
-  }
 
   let model;
   try {
@@ -110,12 +194,20 @@ export async function POST(_req: Request, { params }: Params) {
 
 /**
  * DELETE —— 撤销最近一次压缩（删掉最新那条摘要）。
- *
- * 只删摘要、不动消息：水位线回退到上一条摘要（或没有），下次请求会把这段历史重新发给模型。
+ * pi 主题的压缩由 pi 自己管理，暂不支持撤销（返回 ok + 说明）。
  */
 export async function DELETE(_req: Request, { params }: Params) {
   const { id } = await params;
   const agent = agentOf(id);
+
+  if (isPi(agent)) {
+    return Response.json({
+      ...(await piStats(agent, id)),
+      reason: 'pi 会话的压缩由 pi 自己管理，暂不支持撤销。',
+      removed: false,
+    });
+  }
+
   const contextWindow = await getContextWindow({
     modelId: agent?.model,
     runtime: agent?.runtime === 'cli' ? 'cli' : 'api',
