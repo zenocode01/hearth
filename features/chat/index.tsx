@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ThemeControls } from '@/components/ThemeControls';
+import { confirmDelete } from '@/components/confirmDialog';
 import { useIsMobile } from '@/components/useMediaQuery';
 import { parseStoredParts, deserializeParts } from '@/lib/db/messageParts';
 import type { Agent, ChatMessage, Topic } from '@/lib/db/schema';
@@ -464,9 +465,15 @@ export function ChatView() {
           break;
         }
         case 'delete': {
-          await fetch(`/api/messages/${message.id}`, { method: 'DELETE' });
-          setMessages((prev) => prev.filter((item) => item.id !== message.id));
-          void refreshTopics();
+          confirmDelete({
+            content: '删除后无法恢复。',
+            onOk: async () => {
+              await fetch(`/api/messages/${message.id}`, { method: 'DELETE' });
+              setMessages((prev) => prev.filter((item) => item.id !== message.id));
+              void refreshTopics();
+            },
+            title: '删除这条消息？',
+          });
           break;
         }
       }
@@ -665,6 +672,7 @@ export function ChatView() {
                 <MessageItem
                   busy={busy}
                   canBranch={!isPiTopic}
+                  canDelete={!isPiTopic}
                   key={message.id}
                   message={message}
                   onAction={(target, key) => void handleMessageAction(target, key)}

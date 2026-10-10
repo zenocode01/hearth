@@ -5,6 +5,7 @@ import { toast } from '@lobehub/ui/base-ui';
 import { Download, FileJson, FileText, MessageCircleQuestion, MessageSquarePlus, SquarePen, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
 
+import { confirmDelete } from '@/components/confirmDialog';
 import { Delayed } from '@/components/Delayed';
 import { ListSkeleton } from '@/components/ListSkeleton';
 import type { Agent, Topic } from '@/lib/db/schema';
@@ -24,7 +25,6 @@ interface TopicRowProps {
 
 const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }: TopicRowProps) => {
   const [editing, setEditing] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [draft, setDraft] = useState(topic.title);
 
@@ -57,7 +57,7 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
 
   return (
     <div
-      onClick={() => !editing && !confirming && onSelect(topic.id)}
+      onClick={() => !editing && onSelect(topic.id)}
       style={{
         alignItems: 'center',
         background: active ? 'var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.06))' : undefined,
@@ -85,18 +85,6 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
           }}
           onPressEnter={save}
         />
-      ) : confirming ? (
-        <div style={{ alignItems: 'center', display: 'flex', flex: 1, gap: 6 }}>
-          <Text style={{ flex: 1, fontSize: 13 }} type="danger">
-            删除？
-          </Text>
-          <Button danger size="small" onClick={() => onDelete(topic.id)}>
-            删除
-          </Button>
-          <Button size="small" onClick={() => setConfirming(false)}>
-            取消
-          </Button>
-        </div>
       ) : (
         <>
           {waiting && (
@@ -175,7 +163,11 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
             type="text"
             onClick={(event) => {
               event.stopPropagation();
-              setConfirming(true);
+              confirmDelete({
+                content: '删除后无法恢复，会话中的消息会一起删除。',
+                onOk: () => onDelete(topic.id),
+                title: `删除会话「${topic.title}」？`,
+              });
             }}
           >
             <Icon icon={Trash2} size={14} />
