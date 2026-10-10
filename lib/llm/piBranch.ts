@@ -20,6 +20,8 @@ import { PI_ISOLATED, PI_SESSION_DIR } from './piEnv';
  */
 
 export interface PiBranchMessage {
+  /** entry 时间戳（ISO）；用来显示消息时间 */
+  createdAt?: string | null;
   /** pi entry id（8 位 hex，稳定，可当 React key） */
   id: string;
   /** 与 DB 里 `messages.parts` 同构（复用 deserializeParts 渲染） */
@@ -38,6 +40,7 @@ interface RawEntry {
     toolCallId?: unknown;
   };
   parentId?: string | null;
+  timestamp?: string;
   type?: string;
 }
 
@@ -147,7 +150,7 @@ export function readPiBranchMessages(topicId: string): PiBranchMessage[] | null 
           parts.push({ mediaType: mimeType, type: 'file', url: `data:${mimeType};base64,${block.data}` });
         }
       }
-      if (parts.length > 0) messages.push({ id: entry.id!, parts, role: 'user' });
+      if (parts.length > 0) messages.push({ createdAt: entry.timestamp ?? null, id: entry.id!, parts, role: 'user' });
       lastAssistant = null;
       continue;
     }
@@ -184,7 +187,7 @@ export function readPiBranchMessages(topicId: string): PiBranchMessage[] | null 
         // 同一轮的后续 assistant entry（工具调用后的正文）→ 并进上一条
         lastAssistant.parts.push(...parts);
       } else {
-        lastAssistant = { id: entry.id!, parts, role: 'assistant' };
+        lastAssistant = { createdAt: entry.timestamp ?? null, id: entry.id!, parts, role: 'assistant' };
         messages.push(lastAssistant);
       }
       continue;

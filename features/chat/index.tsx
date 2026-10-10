@@ -292,10 +292,11 @@ export function ChatView() {
                 ...(row.reasoning ? [{ text: row.reasoning, type: 'reasoning' as const }] : []),
                 ...(row.content ? [{ text: row.content, type: 'text' as const }] : []),
               ];
+          const createdAtMs = row.createdAt ? new Date(row.createdAt).getTime() : Number.NaN;
           return {
             id: row.id,
             metadata: {
-              createdAt: new Date(row.createdAt).getTime(),
+              ...(Number.isFinite(createdAtMs) ? { createdAt: createdAtMs } : {}),
               ...(row.reasoningMs ? { reasoningMs: row.reasoningMs } : {}),
             },
             parts,

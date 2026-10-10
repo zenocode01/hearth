@@ -35,6 +35,7 @@ export async function GET(_req: Request, { params }: Params) {
       return Response.json({
         messages: branch.map((item) => ({
           content: '',
+          createdAt: item.createdAt ?? null,
           id: item.id,
           parts: JSON.stringify(item.parts),
           reasoning: null,
