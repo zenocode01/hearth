@@ -101,6 +101,7 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
             {topic.title}
           </Text>
           <ActionIcon
+            aria-label="重命名会话"
             icon={SquarePen}
             size={{ blockSize: 28, size: 14 }}
             title="改名"
@@ -157,6 +158,7 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
             </Button>
           </Popover>
           <ActionIcon
+            aria-label="删除会话"
             danger
             icon={Trash2}
             size={{ blockSize: 28, size: 14 }}
