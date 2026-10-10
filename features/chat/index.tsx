@@ -4,16 +4,19 @@ import { useChat } from '@ai-sdk/react';
 import { Button, Flexbox, Icon, Text, copyToClipboard } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
 import { isToolUIPart, type UIMessage } from 'ai';
-import { PanelLeft, Paperclip } from 'lucide-react';
+import { Dropdown } from 'antd';
+import { MoreHorizontal, PanelLeft, Paperclip } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ThemeControls } from '@/components/ThemeControls';
 import { useConfirmDelete } from '@/components/confirmDialog';
+import { usePromptDialog } from '@/components/promptDialog';
 import { useIsMobile } from '@/components/useMediaQuery';
 import { parseStoredParts, deserializeParts } from '@/lib/db/messageParts';
 import type { Agent, ChatMessage, Topic } from '@/lib/db/schema';
 import { FILE_ACCEPT } from '@/lib/files/constants';
+import { exportFilename } from '@/lib/export/topicExport';
 import { isPiCommand, isPiRpcCommand } from '@/lib/llm/piCommand';
 import { parseToolSettings, type ToolSetting } from '@/lib/tools/settings';
 
@@ -91,6 +94,9 @@ export function ChatView() {
   const router = useRouter();
   // 删除确认对话框（声明式、自包含；见 components/confirmDialog.tsx）
   const { modal: deleteModal, open: openDeleteConfirm } = useConfirmDelete();
+  // 页头「⋯」菜单用的两个对话框
+  const topicDelete = useConfirmDelete();
+  const renameDialog = usePromptDialog();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -219,6 +225,11 @@ export function ChatView() {
     activeAgent?.runtime === 'cli' &&
     isPiCommand(activeAgent.cliCommand) &&
     isPiRpcCommand(activeAgent.cliCommand);
+  /** 当前会话标题（页头显示） */
+  const activeTopicTitle = useMemo(
+    () => topics.find((item) => item.id === activeTopicId)?.title ?? null,
+    [topics, activeTopicId],
+  );
 
   /** 从会话树选了分支点：切到该分支（重载对话），把那句话放回输入框，编辑后发送即开新分支。 */
   const handleBranchFromTree = useCallback((text: string) => {
@@ -714,6 +725,74 @@ export function ChatView() {
     [refreshTopics],
   );
 
+  /** 导出当前会话（拉内容 → 触发下载；与侧栏那套一致） */
+  const handleExport = useCallback(
+    async (format: 'json' | 'md') => {
+      if (!activeTopicId) return;
+      try {
+        const res = await fetch(`/api/topics/${activeTopicId}/export?format=${format}`);
+        if (!res.ok) throw new Error(String(res.status));
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = exportFilename(activeTopicTitle ?? 'conversation', format);
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+        toast.success(`已导出 ${format === 'json' ? 'JSON' : 'Markdown'}`);
+      } catch {
+        toast.error('导出失败，请重试');
+      }
+    },
+    [activeTopicId, activeTopicTitle],
+  );
+
+  /** 页头「⋯」菜单（对标 LobeHub 的话题操作菜单） */
+  const headerMenu = useMemo(
+    () => ({
+      items: [
+        { key: 'rename', label: '重命名' },
+        { key: 'export-md', label: '导出 Markdown' },
+        { key: 'export-json', label: '导出 JSON' },
+        { type: 'divider' as const },
+        { danger: true, key: 'delete', label: '删除会话' },
+      ],
+      onClick: ({ key }: { key: string }) => {
+        if (key === 'rename') {
+          if (!activeTopicId) return;
+          renameDialog.open({
+            defaultValue: activeTopicTitle ?? '',
+            onSubmit: (value) => handleRename(activeTopicId, value),
+            placeholder: '会话标题',
+            title: '重命名会话',
+          });
+        } else if (key === 'export-md') {
+          void handleExport('md');
+        } else if (key === 'export-json') {
+          void handleExport('json');
+        } else if (key === 'delete') {
+          if (!activeTopicId) return;
+          topicDelete.open({
+            content: '删除后无法恢复，会话中的消息会一起删除。',
+            onOk: () => handleDelete(activeTopicId),
+            title: `删除会话「${activeTopicTitle ?? ''}」？`,
+          });
+        }
+      },
+    }),
+    [
+      activeTopicId,
+      activeTopicTitle,
+      handleDelete,
+      handleExport,
+      handleRename,
+      renameDialog.open,
+      topicDelete.open,
+    ],
+  );
+
   return (
     <div style={{ display: 'flex', height: '100dvh' }}>
       {isMobile ? (
@@ -800,9 +879,22 @@ export function ChatView() {
               onClick={() => setSidebarOpen(true)}
             />
           )}
-          <Text style={{ flex: isMobile ? 1 : undefined, fontSize: 16, fontWeight: 600 }}>
-            Hearth
+          <Text
+            ellipsis
+            style={{ flex: 1, fontSize: 16, fontWeight: 600 }}
+            title={activeTopicTitle ?? undefined}
+          >
+            {activeTopicTitle ?? 'Hearth'}
           </Text>
+          {activeTopicId && (
+            <Dropdown menu={headerMenu} trigger={['click']}>
+              <Button
+                aria-label="会话操作"
+                icon={<Icon icon={MoreHorizontal} size={18} />}
+                type="text"
+              />
+            </Dropdown>
+          )}
           <ThemeControls />
         </div>
 
@@ -988,6 +1080,9 @@ export function ChatView() {
 
         {/* 删除消息的确认对话框（声明式、自包含） */}
         {deleteModal}
+        {/* 页头菜单用的重命名 / 删除会话对话框 */}
+        {renameDialog.modal}
+        {topicDelete.modal}
       </div>
     </div>
   );
