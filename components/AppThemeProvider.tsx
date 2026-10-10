@@ -3,7 +3,7 @@
 import 'antd/dist/reset.css';
 
 import { ConfigProvider, ThemeProvider } from '@lobehub/ui';
-import { ModalHost, ToastHost } from '@lobehub/ui/base-ui';
+import { ToastHost } from '@lobehub/ui/base-ui';
 import * as m from 'motion/react-m';
 import { useCallback, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 
@@ -101,8 +101,6 @@ export function AppThemeProvider({ children, initialMode = 'auto' }: AppThemePro
         >
           {children}
           <ToastHost />
-          {/* 命令式对话框（confirmModal/createModal）的挂载点；挂一次即可，见 components/confirmDialog.tsx */}
-          <ModalHost />
         </ThemeProvider>
       </ConfigProvider>
     </ThemeControlContext.Provider>

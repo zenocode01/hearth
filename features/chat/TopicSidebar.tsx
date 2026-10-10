@@ -5,7 +5,7 @@ import { ActionIcon, toast } from '@lobehub/ui/base-ui';
 import { Download, FileJson, FileText, MessageCircleQuestion, MessageSquarePlus, SquarePen, Trash2 } from 'lucide-react';
 import { memo, useState } from 'react';
 
-import { confirmDelete } from '@/components/confirmDialog';
+import { useConfirmDelete } from '@/components/confirmDialog';
 import { Delayed } from '@/components/Delayed';
 import { ListSkeleton } from '@/components/ListSkeleton';
 import type { Agent, Topic } from '@/lib/db/schema';
@@ -27,6 +27,7 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
   const [editing, setEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [draft, setDraft] = useState(topic.title);
+  const confirm = useConfirmDelete();
 
   const save = () => {
     const next = draft.trim();
@@ -163,7 +164,7 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
             title="删除"
             onClick={(event) => {
               event.stopPropagation();
-              confirmDelete({
+              confirm.open({
                 content: '删除后无法恢复，会话中的消息会一起删除。',
                 onOk: () => onDelete(topic.id),
                 title: `删除会话「${topic.title}」？`,
@@ -172,6 +173,8 @@ const TopicRow = memo(({ topic, active, onSelect, onRename, onDelete, waiting }:
           />
         </>
       )}
+
+      {confirm.modal}
     </div>
   );
 });

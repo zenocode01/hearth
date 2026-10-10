@@ -24,11 +24,16 @@ description: 'Use when building or tweaking any UI: button hierarchy, dialogs/co
 
 ## 对话框 / 确认
 
-- **命令式**：`confirmModal`（确认）、`createModal`（自定义内容/表单）。**挂载点**：`components/AppThemeProvider.tsx` 里的 `<ModalHost/>`（挂一次；没挂命令式弹不出来）。
-- **本项目统一入口**：`components/confirmDialog.tsx` 的 `confirmDelete({ title, content, onOk })` —— danger 按钮、取消在左确认在右、中文默认。删除消息/话题/Agent 都走它，**别再用行内两步确认**。
-- 文案写清「删的是什么 + 能不能恢复」（`title` 带对象名、`content` 说后果）。
+- **本项目用声明式 `<Modal>`（base-ui），不用命令式 `confirmModal`**。命令式依赖全局 `<ModalHost/>`，宿主一旦没挂上就"点了删除既不弹窗也不删"（**踩过**：dev HMR 只更新了子组件、根壳没重挂 → 全站删除失效）。声明式自包含、无全局依赖。
+- **统一入口**：`components/confirmDialog.tsx` 的 `useConfirmDelete()`：
+  ```tsx
+  const confirm = useConfirmDelete();
+  <ActionIcon onClick={() => confirm.open({ title: '删除会话？', content: '…', onOk: () => del(id) })} />
+  {confirm.modal}   // 挂在组件树任意位置
+  ```
+  破坏性用 `okButtonProps={{ danger: true }}`；Modal 默认「取消在左、确认在右」；`onOk` 返回 Promise 时按钮自动 loading。
+- 文案写清「删的是什么 + 能不能恢复」。
 - 高代价（批量/不可逆）可上「输入关键字才解锁」的强化确认（LobeHub 的 `DeleteLabelModal` 思路），当前场景未用。
-- 声明式 `<Modal open/>` 是旧写法，新代码不要引入。
 
 ## 间距 / 圆角 / 字号（token 纪律）
 

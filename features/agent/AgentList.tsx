@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { AsyncBoundary } from '@/components/AsyncBoundary';
 import { ListSkeleton } from '@/components/ListSkeleton';
-import { confirmDelete } from '@/components/confirmDialog';
+import { useConfirmDelete } from '@/components/confirmDialog';
 import { useIsMobile } from '@/components/useMediaQuery';
 import type { Agent } from '@/lib/db/schema';
 
@@ -21,6 +21,7 @@ export function AgentList() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [status, setStatus] = useState<LoadStatus>('loading');
   const isMobile = useIsMobile();
+  const confirm = useConfirmDelete();
   const router = useRouter();
 
   /** silent：删除后静默刷新（不闪骨架、失败也不把列表换成错误页） */
@@ -150,7 +151,7 @@ export function AgentList() {
                   style={{ color: 'var(--ant-color-error, #ec5e41)' }}
                   title="删除"
                   onClick={() =>
-                    confirmDelete({
+                    confirm.open({
                       content: '删除后无法恢复；正在使用它的会话会回到默认 Agent。',
                       onOk: () => remove(agent.id),
                       title: `删除 Agent「${agent.name}」？`,
@@ -162,6 +163,8 @@ export function AgentList() {
           ))}
         </Flexbox>
       </AsyncBoundary>
+
+      {confirm.modal}
     </Flexbox>
   );
 }

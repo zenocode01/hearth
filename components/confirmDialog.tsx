@@ -1,21 +1,24 @@
 'use client';
 
-import { confirmModal } from '@lobehub/ui/base-ui';
-import type { ReactNode } from 'react';
+import { Modal } from '@lobehub/ui/base-ui';
+import { useCallback, useState, type ReactNode } from 'react';
 
 /**
- * 危险操作确认对话框（删除等）。
+ * 危险操作确认（删除）。
  *
- * 对齐 LobeHub 的约定（refs/lobe-chat 的 modal skill）：
- * - 用命令式 `confirmModal` + 全局 `<ModalHost/>`（挂在 AppThemeProvider），不自己画遮罩；
- * - 破坏性操作用 **danger 按钮**，取消在左、确认在右；
- * - 文案写清"删的是什么、能不能恢复"。
+ * **为什么不用命令式 `confirmModal`**：它依赖全局 `<ModalHost/>`（挂在 AppThemeProvider）。
+ * 一旦那个宿主没挂上（例如 dev 的 HMR 只更新了子组件、根壳没重挂），点了删除**既不弹窗也不删**——
+ * 表现为"点击没反应"。改成**声明式 `<Modal>` + 局部状态**：对话框就在调用点的 React 树里，
+ * 自包含、无全局依赖，怎么都不会"没反应"。
  *
- * 为什么要有这个：Hearth 之前删消息**没有二次确认**，删话题/Agent 是行内两步确认——
- * 三者风格不一，且误点代价高。统一走这里。
+ * 用法：
+ *   const confirm = useConfirmDelete();
+ *   <ActionIcon onClick={() => confirm.open({ title: '删除会话？', onOk: () => del(id) })} />
+ *   ...
+ *   {confirm.modal}   // 挂在组件树里任意位置
  */
 export interface ConfirmDeleteOptions {
-  /** 补充说明（用 `content` 描述影响） */
+  /** 补充说明（描述影响/是否可恢复） */
   content?: ReactNode;
   /** 确认按钮文案，默认「删除」 */
   okText?: string;
@@ -24,13 +27,38 @@ export interface ConfirmDeleteOptions {
   title: ReactNode;
 }
 
-export function confirmDelete({ title, content, okText = '删除', onOk }: ConfirmDeleteOptions) {
-  return confirmModal({
-    cancelText: '取消',
-    content,
-    okButtonProps: { danger: true },
-    okText,
-    onOk,
-    title,
-  });
+export function useConfirmDelete() {
+  const [pending, setPending] = useState<ConfirmDeleteOptions | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const open = useCallback((options: ConfirmDeleteOptions) => setPending(options), []);
+  const close = useCallback(() => setPending(null), []);
+
+  const handleOk = useCallback(async () => {
+    if (!pending) return;
+    try {
+      setLoading(true);
+      await pending.onOk();
+    } finally {
+      setLoading(false);
+      setPending(null);
+    }
+  }, [pending]);
+
+  const modal = (
+    <Modal
+      cancelText="取消"
+      confirmLoading={loading}
+      okButtonProps={{ danger: true }}
+      okText={pending?.okText ?? '删除'}
+      open={pending !== null}
+      title={pending?.title}
+      onCancel={close}
+      onOk={() => void handleOk()}
+    >
+      {pending?.content}
+    </Modal>
+  );
+
+  return { modal, open };
 }
