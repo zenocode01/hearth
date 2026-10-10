@@ -129,6 +129,9 @@ export function readPiBranchMessages(topicId: string): PiBranchMessage[] | null 
 
   const messages: PiBranchMessage[] = [];
   const toolParts = new Map<string, ToolPart>();
+  // 一轮里 pi 会把「工具调用」和「最终正文」拆成多条 assistant entry；这里合并成一条，
+  // 与流式（AI SDK 一轮=一条 UIMessage）一致——否则「过程折叠」在重载后会失效。
+  let lastAssistant: PiBranchMessage | null = null;
 
   for (const entry of path) {
     if (entry.type !== 'message') continue;
@@ -145,6 +148,7 @@ export function readPiBranchMessages(topicId: string): PiBranchMessage[] | null 
         }
       }
       if (parts.length > 0) messages.push({ id: entry.id!, parts, role: 'user' });
+      lastAssistant = null;
       continue;
     }
 
@@ -175,7 +179,14 @@ export function readPiBranchMessages(topicId: string): PiBranchMessage[] | null 
       if (parts.length === 0 && typeof entry.message?.errorMessage === 'string') {
         parts.push({ text: `> ⚠️ 上一轮调用模型失败：${entry.message.errorMessage}`, type: 'text' });
       }
-      if (parts.length > 0) messages.push({ id: entry.id!, parts, role: 'assistant' });
+      if (parts.length === 0) continue;
+      if (lastAssistant) {
+        // 同一轮的后续 assistant entry（工具调用后的正文）→ 并进上一条
+        lastAssistant.parts.push(...parts);
+      } else {
+        lastAssistant = { id: entry.id!, parts, role: 'assistant' };
+        messages.push(lastAssistant);
+      }
       continue;
     }
 

@@ -283,7 +283,10 @@ export function ChatView() {
               ];
           return {
             id: row.id,
-            metadata: row.reasoningMs ? { reasoningMs: row.reasoningMs } : undefined,
+            metadata: {
+              createdAt: new Date(row.createdAt).getTime(),
+              ...(row.reasoningMs ? { reasoningMs: row.reasoningMs } : {}),
+            },
             parts,
             role: row.role,
           };
@@ -663,6 +666,9 @@ export function ChatView() {
             ) : (
               messages.map((message, index) => (
                 <MessageItem
+                  assistantAvatar={activeAgent?.avatar}
+                  assistantBackground={activeAgent?.backgroundColor}
+                  assistantName={activeAgent?.name ?? '默认 Agent'}
                   busy={busy}
                   canBranch={!isPiTopic}
                   key={message.id}
