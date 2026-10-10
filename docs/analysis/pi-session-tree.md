@@ -82,8 +82,9 @@ pi 的启动命令是 `pi --mode rpc --system-prompt "{{systemPrompt}}"`，**没
 - **S3｜树视图 UI + 分支动作** ✅（已实现，待验收）：工具栏「会话树」面板（读 `get_tree`，点某条 user 消息「从这里分支」→ `navigate` 并把文本回填输入框）；pi 主题的消息动作里隐藏旧的「分支」（避免和会话树语义打架）。认 pi 的小工具抽到客户端可用的 `lib/llm/piCommand.ts`。
 - **S4｜按当前分支渲染对话** ✅（已实现，待验收）：新增 `lib/llm/piBranch.ts`——**直接读会话 JSONL**（不起进程，毫秒级）还原当前 leaf 分支的消息；`GET /api/topics/[id]` 对 pi 主题改返回该分支的消息，切分支后重载即换对话。
   - 关键：pi 是 append-only 树、且我们的会话内导航总会 append 一个 label entry → **文件里最后一条带 id 的 entry 就是当前 leaf**，无需问 pi。
-- **S5｜用量与统计来自 pi**：`ContextMeter` 改用 `get_session_stats`（现在是我们的 DB 估算）。
-- **S6｜会话生命周期对齐**：重命名（`set_session_name`）、删除（清 session 文件）。
+- **S3 追加｜会话树渲染细化** ✅：单行省略（修掉长文本被挤成"每行一个字"）、只给**可见行**缩进并设缩进上限（修掉深层行宽度塌成 0）、分支连线、「当前」徽标、用户/助手图标区分、「只看分支点」开关。
+- **S5｜用量与统计来自 pi** ✅：`GET /context` 对 pi 主题改走 `get_session_stats`（真实占用），`ContextMeter` 按 runtime 分支显示；「立即压缩」调 pi 的 `compact`（不再是我们的摘要）。
+- **S6｜会话生命周期对齐** ✅：删 topic 时清掉对应的 pi 会话文件（`deletePiSessionFile`）；改名时同步 pi 的 `set_session_name`。
 
 ## 6. 待确认
 

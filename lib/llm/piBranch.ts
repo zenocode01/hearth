@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync, type Dirent } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, unlinkSync, type Dirent } from 'node:fs';
 import path from 'node:path';
 
 import type { StoredPart } from '@/lib/db/messageParts';
@@ -194,4 +194,20 @@ export function readPiBranchMessages(topicId: string): PiBranchMessage[] | null 
   }
 
   return messages;
+}
+
+/**
+ * 删除某会话对应的 pi 会话文件（删 topic 时联动清理）。
+ * 找不到也算成功（返回 false 表示"本来就没有"）。
+ */
+export function deletePiSessionFile(topicId: string): boolean {
+  if (!PI_ISOLATED) return false;
+  const file = findSessionFile(topicId);
+  if (!file) return false;
+  try {
+    unlinkSync(file);
+    return true;
+  } catch {
+    return false;
+  }
 }
