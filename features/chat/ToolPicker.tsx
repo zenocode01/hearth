@@ -3,6 +3,7 @@
 import { Block, Flexbox, Icon, Popover, Tag, Text } from '@lobehub/ui';
 import { Switch } from '@lobehub/ui/base-ui';
 import {
+  ArrowUp,
   Blocks,
   Calculator,
   ChevronDown,
@@ -19,6 +20,7 @@ import {
   Search,
   Terminal,
   Wrench,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { memo, useCallback, useEffect, useState } from 'react';
@@ -42,6 +44,9 @@ interface ToolPayload {
   settingsPath?: string;
   tools: ToolItem[];
 }
+
+/** 「悬停看说明」引导只看一次（首次打开面板播一段动效，之后不再提） */
+const HINT_SEEN_KEY = 'hearth-tool-picker-hint-seen';
 
 /** 图标：Hearth 内置工具 + pi 自带工具 + 扩展工具 */
 const TOOL_ICONS: Record<string, LucideIcon> = {
@@ -81,7 +86,10 @@ interface ToolPickerProps {
  */
 export const ToolPicker = memo(({ agentId, settings, onChange }: ToolPickerProps) => {
   const [open, setOpen] = useState(false);
+  // 当前要看说明的工具：悬停 / 点行 / Tab 聚焦都会更新，说明集中显示在面板底部（列表只留图标 + 名字）
+  const [detail, setDetail] = useState<ToolItem | null>(null);
   const [payload, setPayload] = useState<ToolPayload>({ runtime: 'builtin', tools: [] });
+  const [hint, setHint] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -98,10 +106,36 @@ export const ToolPicker = memo(({ agentId, settings, onChange }: ToolPickerProps
     void load();
   }, [load]);
 
+  // 首次打开：底部播一段“往上指”的引导，同时首行亮一下；播完写标记，以后不再打扰
+  useEffect(() => {
+    if (!open) return;
+    let seen = false;
+    try {
+      seen = localStorage.getItem(HINT_SEEN_KEY) === '1';
+    } catch {
+      seen = false;
+    }
+    if (seen) return;
+    setHint(true);
+    const timer = setTimeout(() => {
+      setHint(false);
+      try {
+        localStorage.setItem(HINT_SEEN_KEY, '1');
+      } catch {
+        /* 隐私模式下存不下，下次再播 */
+      }
+    }, 3200);
+    return () => clearTimeout(timer);
+  }, [open]);
+
   const handleOpenChange = useCallback(
     (next: boolean) => {
       setOpen(next);
-      if (next) void load();
+      if (next) {
+        void load();
+      } else {
+        setDetail(null);
+      }
     },
     [load],
   );
@@ -142,32 +176,29 @@ export const ToolPicker = memo(({ agentId, settings, onChange }: ToolPickerProps
     onChange(effective.length === 0 ? [] : effective);
   };
 
-  const row = (tool: ToolItem) => {
+  const row = (tool: ToolItem, hintRow = false) => {
     const Icon = TOOL_ICONS[tool.name] ?? Wrench;
     const checked = isEnabled(tool);
     return (
       <div
+        className={hintRow && hint ? 'hearth-tool-row hearth-tool-row-hint' : 'hearth-tool-row'}
+        data-active={detail?.name === tool.name}
         key={tool.name}
-        style={{ alignItems: 'center', display: 'flex', gap: 10, padding: '6px 8px' }}
+        onClick={() => setDetail(tool)}
+        onFocus={() => setDetail(tool)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setDetail(tool);
+          }
+        }}
+        onMouseEnter={() => setDetail(tool)}
+        tabIndex={0}
       >
-        <Block align="center" flex="none" height={28} horizontal justify="center" variant="outlined" width={28}>
-          <Icon size={14} />
+        <Block align="center" flex="none" height={24} horizontal justify="center" variant="outlined" width={24}>
+          <Icon size={13} />
         </Block>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ fontSize: 13 }}>{tool.label}</Text>
-          <div
-            style={{
-              fontSize: 11.5,
-              opacity: 0.55,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-            title={tool.description}
-          >
-            {tool.description}
-          </div>
-        </div>
+        <span className="hearth-tool-name">{tool.label}</span>
         {isBuiltin || isPi ? (
           <Switch checked={checked} size="small" onChange={(next) => toggle(tool.name, next)} />
         ) : (
@@ -188,64 +219,103 @@ export const ToolPicker = memo(({ agentId, settings, onChange }: ToolPickerProps
   return (
     <Popover
       content={
-        <div style={{ display: 'flex', flexDirection: 'column', padding: 6, width: 340 }}>
-          <Flexbox align="center" horizontal justify="space-between" style={{ padding: '4px 8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', padding: 6, width: 288 }}>
+          <div className="hearth-tool-head">
             <Text style={{ fontSize: 13, fontWeight: 600 }}>
               {payload.runtime === 'pi' ? 'pi 自带的工具' : '工具'}
             </Text>
-            <Text style={{ fontSize: 11.5 }} type="secondary">
-              {payload.tools.length > 0 ? `${enabledCount}/${payload.tools.length} 已启用` : ''}
-            </Text>
-          </Flexbox>
+            {payload.tools.length > 0 && (
+              // 启用数不用写“已启用”：数字 + 一条按比例生长的进度条，开关一切就动一下
+              <div
+                className="hearth-tool-count"
+                title={`已启用 ${enabledCount}/${payload.tools.length}`}
+              >
+                <span className="hearth-tool-count-num" key={enabledCount}>
+                  {enabledCount}
+                  <span className="hearth-tool-count-total">/{payload.tools.length}</span>
+                </span>
+                <span className="hearth-tool-count-bar">
+                  <i
+                    style={{ width: `${Math.round((enabledCount / payload.tools.length) * 100)}%` }}
+                  />
+                </span>
+              </div>
+            )}
+          </div>
 
           {payload.tools.length > 0 && (
-            <div>
+            <div className="hearth-scroll" style={{ maxHeight: 252, overflowY: 'auto' }}>
               {isBuiltin ? (
-                <>
-                  <div style={{ fontSize: 11, opacity: 0.45, padding: '6px 8px 2px' }}>
-                    可开关（随会话保存）
-                  </div>
-                  {payload.tools.map(row)}
-                </>
+                payload.tools.map((tool, index) => row(tool, index === 0))
               ) : (
-                // pi：按来源分组（内置 / 扩展）；开关随会话保存，运行时注入 --tools / --exclude-tools
+                // pi：按来源分组（内置 / 扩展），但不写小标题——极简，来路在底部详情里写明。
+                // 开关随会话保存，运行时注入 --tools / --exclude-tools（见底部 note）。
                 <>
-                  {payload.tools.some((tool) => tool.source === 'builtin') && (
-                    <>
-                      <div style={{ fontSize: 11, opacity: 0.45, padding: '6px 8px 2px' }}>
-                        内置工具（可开关，随会话保存）
-                      </div>
-                      {payload.tools.filter((tool) => tool.source !== 'extension').map(row)}
-                    </>
-                  )}
-                  {payload.tools.some((tool) => tool.source === 'extension') && (
-                    <>
-                      <div style={{ fontSize: 11, opacity: 0.45, padding: '6px 8px 2px' }}>
-                        扩展工具（本地扩展 / npm 包）
-                      </div>
-                      {payload.tools.filter((tool) => tool.source === 'extension').map(row)}
-                    </>
-                  )}
+                  {payload.tools.some((tool) => tool.source !== 'extension') &&
+                    payload.tools
+                      .filter((tool) => tool.source !== 'extension')
+                      .map((tool, index) => row(tool, index === 0))}
+                  {payload.tools.some((tool) => tool.source !== 'extension') &&
+                    payload.tools.some((tool) => tool.source === 'extension') && (
+                      <div className="hearth-tool-divider" />
+                    )}
+                  {payload.tools.some((tool) => tool.source === 'extension') &&
+                    payload.tools
+                      .filter((tool) => tool.source === 'extension')
+                      .map((tool, index) =>
+                        row(tool, payload.tools.some((item) => item.source !== 'extension') ? false : index === 0),
+                      )}
                 </>
               )}
             </div>
           )}
 
-          {(payload.note || payload.settingsPath) && (
-            <div
-              style={{
-                borderTop: '1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.08))',
-                fontSize: 11.5,
-                lineHeight: 1.6,
-                marginTop: 6,
-                opacity: 0.55,
-                padding: '8px 8px 2px',
-                wordBreak: 'break-all',
-              }}
-            >
-              {payload.note}
-              {payload.settingsPath && payload.runtime === 'pi' && (
-                <div style={{ marginTop: 2 }}>配置：{payload.settingsPath}</div>
+          {(detail || payload.note || payload.settingsPath) && (
+            <div className="hearth-tool-foot hearth-scroll">
+              {hint && !detail && (
+                <div className="hearth-tool-hint">
+                  <Icon icon={ArrowUp} size={11} />
+                  悬停工具行看说明
+                </div>
+              )}
+              {detail ? (
+                <div className="hearth-collapse-in" key={detail.name}>
+                  <Flexbox align="center" gap={6} horizontal>
+                    <Text style={{ fontSize: 12.5, fontWeight: 600 }}>{detail.label}</Text>
+                    <Text style={{ fontSize: 11, opacity: 0.45 }}>
+                      {detail.name}
+                      {detail.source ? ` · ${detail.source === 'extension' ? '扩展' : '内置'}` : ''}
+                    </Text>
+                    <span style={{ flex: 1 }} />
+                    <Tag size="small" style={{ opacity: isEnabled(detail) ? 1 : 0.45 }}>
+                      {isEnabled(detail) ? '已启用' : '未启用'}
+                    </Tag>
+                    <Block
+                      align="center"
+                      clickable
+                      flex="none"
+                      height={20}
+                      horizontal
+                      justify="center"
+                      title="收起说明"
+                      variant="borderless"
+                      width={20}
+                      onClick={() => setDetail(null)}
+                    >
+                      <Icon icon={X} size={12} />
+                    </Block>
+                  </Flexbox>
+                  <div className="hearth-tool-foot-body">
+                    {detail.description || '该工具没有说明。'}
+                  </div>
+                </div>
+              ) : (
+                <div className="hearth-tool-note">
+                  {payload.note}
+                  {payload.settingsPath && payload.runtime === 'pi' && (
+                    <div style={{ marginTop: 2 }}>配置：{payload.settingsPath}</div>
+                  )}
+                </div>
               )}
             </div>
           )}

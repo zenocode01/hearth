@@ -389,3 +389,199 @@ html[data-theme='dark'] .hearth-boot {
     grid-template-columns: 1fr;
   }
 }
+
+/*
+ * 工具面板（ToolPicker）：列表收成单行（图标 + 名字 + 开关），
+ * 说明集中在面板底部（.hearth-tool-foot），由悬停 / 点行 / Tab 聚焦驱动。
+ * 之前每行都写说明，14 个工具高过一屏，且说明被 ellipsis 截断读不完整。
+ */
+.hearth-tool-row {
+  align-items: center;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 5px 8px;
+  transition: background-color 0.15s ease;
+}
+
+.hearth-tool-row:hover {
+  background: var(--ant-color-fill-tertiary, rgba(0, 0, 0, 0.04));
+}
+
+/* 点选过的行留个底，触屏上没有悬停也能看出当前说明对应哪个工具 */
+.hearth-tool-row[data-active='true'] {
+  background: var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.06));
+}
+
+.hearth-tool-row:focus-visible {
+  outline: 2px solid var(--ant-color-primary, #1677ff);
+  outline-offset: -2px;
+}
+
+.hearth-tool-name {
+  flex: 1;
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * 底部说明区固定高度：弹层是向上弹的（placement=topLeft），说明长短线一带高度变化，
+ * 整块列表就会上下跳（就是之前那种闪烁）。所以详情和默认 note 共用一个固定高度的容器，
+ * 内容装不下就内部滚动（复用 .hearth-scroll 细滚动条）。
+ */
+/* 内置 / 扩展两组之间只留一条细线，不写小标题 */
+.hearth-tool-divider {
+  background: var(--ant-color-border-secondary, rgba(0, 0, 0, 0.08));
+  height: 1px;
+  margin: 6px 8px;
+}
+
+.hearth-tool-foot {
+  border-top: 1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.08));
+  font-size: 11.5px;
+  height: 124px;
+  line-height: 1.6;
+  margin-top: 6px;
+  overflow-y: auto;
+  padding: 8px 8px 6px;
+}
+
+.hearth-tool-foot-body {
+  font-size: 11px;
+  margin-top: 4px;
+  white-space: pre-wrap;
+}
+
+.hearth-tool-note {
+  opacity: 0.55;
+  word-break: break-all;
+}
+
+/* 面板头：标题 + 启用数进度胶囊（替掉“10/14 已启用”这种整句文字） */
+.hearth-tool-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 8px 6px;
+}
+
+.hearth-tool-count {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.hearth-tool-count-num {
+  animation: hearth-count-tick 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.hearth-tool-count-total {
+  font-size: 10.5px;
+  opacity: 0.45;
+}
+
+.hearth-tool-count-bar {
+  background: var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.06));
+  border-radius: 2px;
+  display: block;
+  height: 2px;
+  overflow: hidden;
+  width: 48px;
+}
+
+/* 开关一切，这条就按新的启用比例滑过去 */
+.hearth-tool-count-bar > i {
+  background: var(--ant-color-primary, #1677ff);
+  display: block;
+  height: 100%;
+  transition: width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes hearth-count-tick {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*
+ * 一次性引导（只首次打开面板播）：底部一句“往上指”的文案浮两下就淡掉，
+ * 同时列表首行亮一下——比常驻一行“悬停看说明”提示安静得多。
+ */
+.hearth-tool-hint {
+  align-items: center;
+  animation: hearth-tool-hint 1.5s cubic-bezier(0.4, 0, 0.2, 1) 2 forwards;
+  color: var(--ant-color-text-tertiary, rgba(0, 0, 0, 0.4));
+  display: flex;
+  font-size: 11px;
+  gap: 4px;
+  margin-bottom: 6px;
+  pointer-events: none;
+}
+
+@keyframes hearth-tool-hint {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+
+  60% {
+    opacity: 0.9;
+    transform: translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+}
+
+.hearth-tool-row-hint {
+  animation: hearth-row-hint 1.5s cubic-bezier(0.4, 0, 0.2, 1) 2;
+}
+
+@keyframes hearth-row-hint {
+  0%,
+  100% {
+    background: transparent;
+  }
+
+  30% {
+    background: var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.06));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hearth-tool-count-num,
+  .hearth-tool-row-hint {
+    animation: none;
+  }
+
+  .hearth-tool-count-bar > i {
+    transition: none;
+  }
+
+  /* 不做浮动，但仍然淡掉，不留常驻文字 */
+  .hearth-tool-hint {
+    animation: none;
+    opacity: 0;
+  }
+}
