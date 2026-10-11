@@ -585,3 +585,94 @@ html[data-theme='dark'] .hearth-boot {
     opacity: 0;
   }
 }
+
+/*
+ * 左侧会话栏（TopicSidebar）：布局对标 LIMS 侧栏——
+ * 顶部动作行（新建会话）→ 区头（弱色小标题 + 本区自己的入口）→ 列表（可分组）。
+ * 全栏只有一种底色 + fill-tertiary/secondary 做 hover 与选中，不用卡片、不用阴影。
+ */
+.hearth-topic-action {
+  align-items: center;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  padding: 7px 8px;
+  transition: background-color 0.15s ease;
+}
+
+.hearth-topic-action:hover {
+  background: var(--ant-color-fill-tertiary, rgba(0, 0, 0, 0.04));
+}
+
+.hearth-topic-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 8px 2px;
+}
+
+.hearth-topic-head-label {
+  font-size: 11px;
+  opacity: 0.45;
+}
+
+/* 「列表设置」弹层里的分组小标题与单选行 */
+.hearth-menu-label {
+  font-size: 11px;
+  opacity: 0.45;
+  padding: 6px 6px 2px;
+}
+
+.hearth-menu-row {
+  align-items: center;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  padding: 6px 8px;
+  transition: background-color 0.15s ease;
+}
+
+.hearth-menu-row:hover {
+  background: var(--ant-color-fill-tertiary, rgba(0, 0, 0, 0.04));
+}
+
+/* 选中态靠右边的勾表达，不额外加底色（否则和 hover 混在一起） */
+.hearth-menu-row[data-active='true'] {
+  font-weight: 500;
+}
+
+/* 分组视图的一级节点 */
+.hearth-topic-group {
+  align-items: center;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  font-size: 12.5px;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 6px 8px;
+  transition: background-color 0.15s ease;
+}
+
+.hearth-topic-group:hover {
+  background: var(--ant-color-fill-tertiary, rgba(0, 0, 0, 0.04));
+}
+
+.hearth-topic-group-name {
+  flex: 1;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hearth-topic-group-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.45;
+}
