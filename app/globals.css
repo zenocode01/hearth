@@ -212,3 +212,180 @@ html[data-theme='dark'] .hearth-boot {
   animation: none;
   mix-blend-mode: normal;
 }
+
+/*
+ * 主题胶囊（ThemeControls）：折叠态只有当前模式图标 + 名字，点击原地展开。
+ * 宽度用 grid-template-columns 0fr → 1fr 插值，不猜 max-width、不截断内容。
+ * 用 animation 而不是 transition：切主题时 themeTransition 会临时注入
+ * `*{transition:none!important}`，transition 会被吞掉，animation 不受影响。
+ */
+.hearth-theme-pill {
+  align-items: center;
+  background: var(--ant-color-bg-container, #fff);
+  border: 1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.08));
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  display: flex;
+  isolation: isolate;
+  padding: 2px;
+  position: relative;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.12s ease;
+}
+
+/*
+ * 悬停罩层：用 ::before 垫在背景之上、内容之下（z-index:-1 + isolation），
+ * 所以半透明 fill 不会透过胶囊把底下的页面透出来，也不会给文字加罩。
+ * 不用 trigger 自己的方块底色：那颗圆角矩形嵌在胶囊里，边缘看着脏。
+ */
+.hearth-theme-pill::before {
+  background: var(--ant-color-fill-tertiary, rgba(0, 0, 0, 0.04));
+  border-radius: inherit;
+  content: '';
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 0.18s ease, background-color 0.18s ease;
+  z-index: -1;
+}
+
+.hearth-theme-pill:hover {
+  border-color: var(--ant-color-border, rgba(0, 0, 0, 0.15));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.hearth-theme-pill:hover::before {
+  opacity: 1;
+}
+
+.hearth-theme-pill:active {
+  transform: scale(0.985);
+}
+
+.hearth-theme-pill:active::before {
+  background: var(--ant-color-fill-secondary, rgba(0, 0, 0, 0.06));
+}
+
+/* 展开态它是个面板，不是按钮：不铺整颗罩层（会把分段控件也染灰）、不按压缩放，
+   只给触发器自己的圆角块做反馈。 */
+.hearth-theme-pill[data-open='true']:hover {
+  border-color: var(--ant-color-border-secondary, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.hearth-theme-pill[data-open='true']:hover::before {
+  opacity: 0;
+}
+
+.hearth-theme-pill[data-open='true']:active {
+  transform: none;
+}
+
+.hearth-theme-pill[data-open='true'] .hearth-theme-pill-trigger:hover {
+  background: var(--ant-color-fill-tertiary, rgba(0, 0, 0, 0.04));
+}
+
+.hearth-theme-pill-trigger {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: none;
+  font-size: 13px;
+  gap: 6px;
+  padding: 6px 12px;
+}
+
+/* 折叠态：文字走次级色，悬停时图标与文字一起提到主文字色 */
+.hearth-theme-pill-label {
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.65));
+  transition: color 0.18s ease;
+}
+
+.hearth-theme-pill:hover .hearth-theme-pill-trigger,
+.hearth-theme-pill:hover .hearth-theme-pill-label {
+  color: var(--ant-color-text, #1f1f1f);
+}
+
+.hearth-theme-pill-trigger:focus-visible {
+  outline: 2px solid var(--ant-color-primary, #1677ff);
+  outline-offset: 1px;
+}
+
+/* 展开提示：折叠态常驻弱色箭头，悬停时加深并往下顶一下（告诉用户这颗能展开） */
+.hearth-theme-pill-caret {
+  color: var(--ant-color-text-tertiary, rgba(0, 0, 0, 0.4));
+  display: inline-flex;
+  margin-left: -2px;
+  transition: color 0.18s ease, transform 0.18s ease;
+}
+
+.hearth-theme-pill:hover .hearth-theme-pill-caret {
+  color: var(--ant-color-text, #1f1f1f);
+  transform: translateY(1px);
+}
+
+/* 展开后分段控件已写着模式名，折叠态的重复文字与箭头直接隐藏 */
+.hearth-theme-pill[data-open='true'] .hearth-theme-pill-label,
+.hearth-theme-pill[data-open='true'] .hearth-theme-pill-caret {
+  display: none;
+}
+
+.hearth-theme-pill-body {
+  display: grid;
+  grid-template-columns: 0fr;
+}
+
+.hearth-theme-pill-inner {
+  min-width: 0;
+  overflow: hidden;
+  padding-right: 6px;
+}
+
+.hearth-theme-pill[data-open='true'] .hearth-theme-pill-body {
+  animation: hearth-pill-open 240ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.hearth-theme-pill[data-open='false'] .hearth-theme-pill-body {
+  animation: hearth-pill-close 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes hearth-pill-open {
+  from {
+    grid-template-columns: 0fr;
+    opacity: 0;
+  }
+
+  to {
+    grid-template-columns: 1fr;
+    opacity: 1;
+  }
+}
+
+@keyframes hearth-pill-close {
+  from {
+    grid-template-columns: 1fr;
+    opacity: 1;
+  }
+
+  to {
+    grid-template-columns: 0fr;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hearth-theme-pill-body {
+    animation: none !important;
+  }
+
+  .hearth-theme-pill[data-open='true'] .hearth-theme-pill-body {
+    grid-template-columns: 1fr;
+  }
+}
