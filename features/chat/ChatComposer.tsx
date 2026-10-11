@@ -5,6 +5,15 @@ import { memo, useRef, useState, type KeyboardEvent, type ReactNode } from 'reac
 
 import { useIsMobile } from '@/components/useMediaQuery';
 
+import { MentionMenu } from './MentionMenu';
+import {
+  applyMention,
+  detectMention,
+  filterMentionGroups,
+  type MentionCategory,
+  type MentionItem,
+} from './mention';
+
 export interface SlashCommand {
   description?: string;
   name: string;
@@ -15,6 +24,8 @@ interface ChatComposerProps {
   contextMeter?: ReactNode;
   /** 待发送附件的预览区（挂在输入框上方） */
   attachmentSlot?: ReactNode;
+  /** 输入框上方的引用提示（如「将引用会话：周报备份」） */
+  referenceHint?: ReactNode;
   /** 附件按钮（操作栏左侧，工具入口旁边） */
   attachButton?: ReactNode;
   busy: boolean;
@@ -39,6 +50,10 @@ interface ChatComposerProps {
   history?: string[];
   /** 受控草稿（"放回输入框"会改写它） */
   value: string;
+  /** `@` 提及候选（按类别分组，如 Agent / 会话） */
+  mentionCategories?: MentionCategory[];
+  /** 选中一个 `@` 候选后做后续动作（插入文本由输入框自己做：切换 Agent / 记下引用） */
+  onMentionSelect?: (item: MentionItem) => void;
 }
 
 /** 底部输入框：Enter 发送、Shift+Enter 换行；流式中变为停止按钮。 */
@@ -60,6 +75,9 @@ export const ChatComposer = memo(
     sessionTree,
     toolPicker,
     history,
+    mentionCategories,
+    onMentionSelect,
+    referenceHint,
   }: ChatComposerProps) => {
     const composingRef = useRef(false);
     const dragDepthRef = useRef(0);
@@ -68,6 +86,13 @@ export const ChatComposer = memo(
     const [histIndex, setHistIndex] = useState(-1);
     /** 斜杠命令选中项 */
     const [slashIndex, setSlashIndex] = useState(0);
+    /** `@` 提及选中项（展平顺序里的下标） */
+    const [mentionIndex, setMentionIndex] = useState(0);
+    /** Esc 关掉提及菜单后，直到输入再变之前不再弹出来 */
+    const [mentionSuppressed, setMentionSuppressed] = useState(false);
+    /** 光标位置（受控 textarea 不给我们光标，只能自己记） */
+    const [caret, setCaret] = useState(0);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const isMobile = useIsMobile();
     const canSend = (value.trim().length > 0 || Boolean(attachmentSlot)) && !busy;
     // 触摸设备上把主按钮做大到 40px（触控目标）
@@ -83,8 +108,42 @@ export const ChatComposer = memo(
           );
     const showSlashMenu = slashMatches.length > 0;
 
+    // `@` 提及：`@` 前必须是行首或空白；光标前的查询词用来过滤候选
+    const mentionQuery = mentionSuppressed ? null : detectMention(value, caret);
+    const mentionItems = mentionQuery
+      ? filterMentionGroups(mentionCategories ?? [], mentionQuery.query)
+      : null;
+    const showMentionMenu = Boolean(mentionItems && mentionItems.items.length > 0);
+
     const submit = () => {
       if (canSend) onSend();
+    };
+
+    /** 记住 textarea 元素与光标（`@` 触发判断、插入后复位光标都要用） */
+    const trackCaret = (el: HTMLTextAreaElement) => {
+      textareaRef.current = el;
+      setCaret(el.selectionStart ?? el.value.length);
+    };
+
+    /** 选中一个 `@` 候选：把 `@查询词` 换成候选文本，并把光标移到后面 */
+    const selectMention = (item: MentionItem) => {
+      if (!mentionQuery) return;
+      const { caret: next, text } = applyMention(value, mentionQuery, item.insert);
+      setMentionIndex(0);
+      setMentionSuppressed(false);
+      setHistIndex(-1);
+      onChange(text);
+      const el = textareaRef.current;
+      if (el) {
+        requestAnimationFrame(() => {
+          el.focus();
+          el.setSelectionRange(next, next);
+          setCaret(next);
+        });
+      } else {
+        setCaret(next);
+      }
+      onMentionSelect?.(item);
     };
 
     const runCommand = (name: string) => {
@@ -95,6 +154,24 @@ export const ChatComposer = memo(
 
     /** ↑/↓ 翻输入历史（光标在开头或输入框为空时触发；对标 LobeHub 的 InputHistoryPopup） */
     const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      // `@` 提及菜单打开时：↑/↓ 选项、Esc 关掉（Enter 在 onPressEnter 里处理）
+      if (showMentionMenu) {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          setMentionIndex((index) => Math.min((mentionItems?.items.length ?? 1) - 1, index + 1));
+          return;
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          setMentionIndex((index) => Math.max(0, index - 1));
+          return;
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setMentionSuppressed(true);
+          return;
+        }
+      }
       // 斜杠菜单打开时：↑/↓ 选项、Esc 关闭
       if (showSlashMenu) {
         if (event.key === 'ArrowDown') {
@@ -169,8 +246,18 @@ export const ChatComposer = memo(
         }}
       >
         {attachmentSlot}
+        {referenceHint}
 
         <div style={{ position: 'relative' }}>
+          {showMentionMenu && (
+            <MentionMenu
+              activeIndex={mentionIndex}
+              categories={mentionItems?.categories ?? []}
+              onHover={setMentionIndex}
+              onSelect={selectMention}
+            />
+          )}
+
           {showSlashMenu && (
             <div
               style={{
@@ -233,14 +320,22 @@ export const ChatComposer = memo(
             autoSize={{ maxRows: 6, minRows: 1 }}
             disabled={disabled}
             placeholder={
-              disabled ? '请先回答上面的问题…' : '输入消息，Enter 发送，Shift+Enter 换行'
+              disabled
+                ? '请先回答上面的问题…'
+                : '输入消息，Enter 发送，Shift+Enter 换行（@ 提及会话 / Agent，/ 命令）'
             }
             value={value}
             onChange={(event) => {
               setHistIndex(-1);
+              setMentionIndex(0);
+              setMentionSuppressed(false);
+              trackCaret(event.target);
               onChange(event.target.value);
             }}
+            onClick={(event) => trackCaret(event.currentTarget)}
             onKeyDown={handleKeyDown}
+            onKeyUp={(event) => trackCaret(event.currentTarget)}
+            onSelect={(event) => trackCaret(event.currentTarget)}
             onCompositionEnd={() => (composingRef.current = false)}
             onCompositionStart={() => (composingRef.current = true)}
             onPaste={(event) => {
@@ -255,6 +350,14 @@ export const ChatComposer = memo(
               // 输入法组合中（中文拼音）不触发发送
               if (composingRef.current || event.shiftKey) return;
               event.preventDefault();
+              if (showMentionMenu) {
+                const picked =
+                  (mentionItems?.items ?? [])[
+                    Math.min(mentionIndex, (mentionItems?.items.length ?? 1) - 1)
+                  ];
+                if (picked) selectMention(picked);
+                return;
+              }
               if (showSlashMenu) {
                 const picked = slashMatches[Math.min(slashIndex, slashMatches.length - 1)];
                 if (picked) runCommand(picked.name);

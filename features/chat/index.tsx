@@ -5,7 +5,7 @@ import { Button, Flexbox, Icon, Text, copyToClipboard } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
 import { isToolUIPart, type UIMessage } from 'ai';
 import { Dropdown } from 'antd';
-import { MoreHorizontal, PanelLeft, Paperclip } from 'lucide-react';
+import { MoreHorizontal, MessageSquareText, PanelLeft, Paperclip } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -20,6 +20,7 @@ import { exportFilename } from '@/lib/export/topicExport';
 import { isPiCommand, isPiRpcCommand } from '@/lib/llm/piCommand';
 import { parseToolSettings, type ToolSetting } from '@/lib/tools/settings';
 
+import { AgentAvatar } from '../agent/AgentAvatar';
 import { AttachmentPreview } from './AttachmentPreview';
 import { BackBottom } from './BackBottom';
 import { ChatComposer } from './ChatComposer';
@@ -27,6 +28,7 @@ import { ContextMeter } from './ContextMeter';
 import { EffortPicker } from './EffortPicker';
 import { EmptyState } from './EmptyState';
 import { findPendingQuestions, mergePendingQuestions } from './interventions';
+import { extractTopicRefs, type MentionCategory, type MentionItem } from './mention';
 import { MessageItem } from './MessageItem';
 import { MessageActionProvider } from './MessageActionProvider';
 import type { MessageActionKey } from './MessageActions';
@@ -314,6 +316,70 @@ export function ChatView() {
     [activeTopicId, refreshTopics],
   );
 
+  /**
+   * `@` 提及候选（先做两类，对标 LobeHub 的 MentionMenu）：
+   * - Agent：选中 = 把本会话交给它回答（走 handleAgentChange，人设立即生效）
+   * - 会话：选中 = 往输入框插 `@标题`，发送时把那个会话最近的内容作为引用发给模型
+   */
+  const mentionCategories = useMemo<MentionCategory[]>(() => {
+    const categories: MentionCategory[] = [];
+    const otherAgents = agents.filter((agent) => agent.id !== activeAgentId);
+    if (otherAgents.length > 0) {
+      categories.push({
+        hint: '切换本会话的人设',
+        items: otherAgents.map((agent) => ({
+          description: agent.runtime === 'cli' ? '外部 CLI' : (agent.model ?? '默认模型'),
+          icon: (
+            <AgentAvatar
+              avatar={agent.avatar ?? '😀'}
+              background={agent.backgroundColor}
+              size={18}
+            />
+          ),
+          id: agent.id,
+          key: `agent-${agent.id}`,
+          kind: 'agent',
+          label: agent.name,
+        })),
+        key: 'agent',
+        label: 'Agent',
+      });
+    }
+    const otherTopics = topics.filter((topic) => topic.id !== activeTopicId);
+    if (otherTopics.length > 0) {
+      categories.push({
+        hint: '把它最近的内容作为参考',
+        items: otherTopics.map((topic) => ({
+          icon: <Icon icon={MessageSquareText} size={16} />,
+          id: topic.id,
+          insert: `@${topic.title}`,
+          key: `topic-${topic.id}`,
+          kind: 'topic',
+          label: topic.title,
+        })),
+        key: 'topic',
+        label: '会话',
+      });
+    }
+    return categories;
+  }, [activeAgentId, activeTopicId, agents, topics]);
+
+  const handleMentionSelect = useCallback(
+    (item: MentionItem) => {
+      // 会话类不用做事：`@标题` 已经插进文本，发送时现认（见 mention.ts 的 extractTopicRefs）
+      if (item.kind !== 'agent') return;
+      void handleAgentChange(item.id);
+      toast.success(`已切换到「${item.label}」，本会话由它回答`);
+    },
+    [handleAgentChange],
+  );
+
+  /** 草稿里现认的会话引用（跟着文本走：删掉 token 就没了，切会话/刷新也一致） */
+  const activeTopicRefs = useMemo(
+    () => extractTopicRefs(draft, topics, { excludeTopicId: activeTopicId }),
+    [activeTopicId, draft, topics],
+  );
+
   // 当前会话写回 URL
   useEffect(() => {
     window.history.replaceState(null, '', activeTopicId ? `/chat?topic=${activeTopicId}` : '/chat');
@@ -459,11 +525,14 @@ export function ChatView() {
         url: item.url as string,
       }));
     attachments.clear();
+    // `@` 引用的会话：直接从文本里认（token 被删掉 = 引用作废）
+    const references = activeTopicRefs.map((ref) => ({ id: ref.id, type: 'topic' }));
     void sendMessage(
       { files, text },
       {
         body: {
           agentId: activeAgentId ?? undefined,
+          references: references.length > 0 ? references : undefined,
           tools: toolSettings,
           topicId: topicId ?? undefined,
         },
@@ -479,6 +548,7 @@ export function ChatView() {
     scrollToBottom,
     sendMessage,
     toolSettings,
+    activeTopicRefs,
   ]);
 
   /** 消息操作：复制 / 放回输入框 / 重新生成 / 删除。 */
@@ -1032,6 +1102,13 @@ export function ChatView() {
           busy={busy}
           disabled={hasPendingQuestion || attachments.uploadingCount > 0}
           onFiles={(files) => void attachments.addFiles(files)}
+          referenceHint={
+            activeTopicRefs.length > 0 ? (
+              <Text style={{ fontSize: 12 }} type="secondary">
+                将引用会话：{activeTopicRefs.map((ref) => ref.title).join('、')}
+              </Text>
+            ) : null
+          }
           toolPicker={
             <ToolPicker
               agentId={activeAgentId}
@@ -1058,7 +1135,9 @@ export function ChatView() {
           contextMeter={<ContextMeter refreshKey={messages.length} topicId={activeTopicId} />}
           commands={slashCommands}
           history={inputHistory}
+          mentionCategories={mentionCategories}
           onCommand={handleCommand}
+          onMentionSelect={handleMentionSelect}
           value={draft}
           onChange={setDraft}
           onSend={() => void handleSend()}

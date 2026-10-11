@@ -20,6 +20,7 @@ import { currentTurnImages, currentTurnTextBlocks, toModelMessagesWithImages } f
 import { builtinSupportsVision } from '@/lib/llm/capabilities';
 import { prepareContext, withSummaryInstruction } from '@/lib/llm/compaction';
 import { getContextWindow } from '@/lib/llm/modelContext';
+import { buildTopicReferences, parseTopicReferences, withReferences } from '@/lib/llm/references';
 import { listEnabledConfigs } from '@/lib/db/mcpServers';
 import { buildMcpTools } from '@/lib/mcp/tools';
 import { buildSkillTools, buildSkillsPrompt } from '@/lib/skills/agent';
@@ -82,9 +83,11 @@ export async function POST(req: Request) {
     topicId,
     agentId,
     tools: bodyTools,
+    references: bodyReferences,
   }: {
     agentId?: string;
     messages: UIMessage[];
+    references?: unknown;
     tools?: unknown;
     topicId?: string;
   } = await req.json();
@@ -175,6 +178,12 @@ export async function POST(req: Request) {
       console.error('[chat] 保存 AI 回复失败', error);
     }
   };
+
+  // `@会话` 引用：读被引用会话的最近内容，拼成一段参考文本。只发给模型，不落库
+  // （与附件同一套取舍：历史里只留输入框那句 `@标题`）。
+  const referenceBlock = buildTopicReferences(parseTopicReferences(bodyReferences), {
+    excludeTopicId: topicId ?? null,
+  });
 
   // ---------- 外部 CLI 型 Agent（pi / opencode / claude …） ----------
   if (agent?.runtime === 'cli') {
@@ -308,13 +317,15 @@ export async function POST(req: Request) {
           // 模板没带 {{systemPrompt}} 时兜底把并进 prompt，避免人设静默丢失。
           // 非 sessionMode：把（可能已压缩的）历史 + 技能目录 + 摘要拼成一段。
           const persona = agent.systemPrompt?.trim() ?? '';
+          // `@会话` 引用拼在本轮提问前面（pi 的 session 模式同样只发这一条，引用就跟着它走）
+          const questionWithRefs = referenceBlock ? `${referenceBlock}\n\n${question}` : question;
           const promptText = sessionMode
             ? persona && !effectiveCommand.includes('{{systemPrompt}}')
-              ? `你的角色设定：${persona}\n\n${question}`
-              : question
+              ? `你的角色设定：${persona}\n\n${questionWithRefs}`
+              : questionWithRefs
             : buildCliPrompt({
                 history: cliHistory,
-                question,
+                question: questionWithRefs,
                 // 模板里有 {{systemPrompt}} 就交给 CLI，没有则并进 prompt
                 systemPrompt: effectiveCommand.includes('{{systemPrompt}}')
                   ? null
@@ -428,9 +439,12 @@ export async function POST(req: Request) {
     instructions: instructions || undefined,
     // 自己转：附件是 /uploads 相对路径，SDK 的 convertToModelMessages 走 new URL() 会抛；
     // 且只把**当前轮**的图片转成 image part（历史附件只留文字，见 lib/llm/attachments.ts）
-    messages: await toModelMessagesWithImages(context.messages, {
-      supportsVision: builtinSupportsVision(),
-    }),
+    messages: await toModelMessagesWithImages(
+      withReferences(context.messages, referenceBlock),
+      {
+        supportsVision: builtinSupportsVision(),
+      },
+    ),
     temperature: agent?.temperature ?? undefined,
     // 思考等级：openai-compatible 的 chat options 认 reasoningEffort（最终发给模型 reasoning_effort）。
     // 空 = 不干预，用模型自己的默认；非法值在 normalizeReasoningEffort 就被丢掉了。

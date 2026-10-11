@@ -49,9 +49,9 @@ Hearth 是**扁平直给**：朴素渲染所有消息、内联动作栏、基础
 |---|---|---|---|
 | 结构 | `@lobehub/editor` 的 ChatInput；左 `ActionBar` / 右 `SendArea` / 下方 `ControlBar(28px)`（`ChatInput/Desktop/index.tsx`） | `textarea`；左（附件/思考档/工具/会话树/上下文）/ 右发送·停止（`ChatComposer.tsx`） | 结构一致；控件不同 |
 | 左动作 | plus/voice/model/search/tools/memory/params/contextWindow/mention/history/clear/typo/agentMode…（`ActionBar/config.ts`） | 附件/思考档/工具/会话树/上下文 | 够用 |
-| 提及 `@` | Fuse 过滤的分类菜单（agents/members/topics/skills/tools/files）（`InputEditor/useMentionCategories.tsx`） | 无 | 中 |
-| 斜杠 `/` | 行首命令 + 技能，插入**彩色 action tag**（`useSlashActionItems.ts`） | 无 | 中（至少 `/compact`、`/new`） |
-| 草稿/历史 | 草稿持久化 + 跨 composer 草稿总线 + 输入历史（↑/↓）（`useChatInputDraft`、`InputHistoryPopup`） | 无（**发送前刷新会丢草稿**） | ⭐草稿持久化 |
+| 提及 `@` | Fuse 过滤的分类菜单（agents/members/topics/skills/tools/files）（`InputEditor/useMentionCategories.tsx`） | ✅ **Agent / 会话两类**（2026-10-11）：Agent = 切换本会话人设，会话 = 引用其最近内容（`features/chat/mention.ts` + `MentionMenu.tsx` + `lib/llm/references.ts`）。缺：技能/工具/文件三类（文件要先给附件建索引） | 部分对齐 |
+| 斜杠 `/` | 行首命令 + 技能，插入**彩色 action tag**（`useSlashActionItems.ts`） | 行首命令 `/new`、`/compact`（无彩色 tag） | ✅基本够用 |
+| 草稿/历史 | 草稿持久化 + 跨 composer 草稿总线 + 输入历史（↑/↓）（`useChatInputDraft`、`InputHistoryPopup`） | ✅ 已做（按会话存 localStorage；↑/↓ 翻历史） | ✅已对齐 |
 | 全屏展开 | `ComposerExpandButton` 全屏编辑 | 无 | 低 |
 | 语音 | 听写 + 语音消息 | 无 | 低 |
 
@@ -89,17 +89,11 @@ Hearth 是**扁平直给**：朴素渲染所有消息、内联动作栏、基础
 
 > 原则：挑 ⭐ 高杠杆、改动可控的；每项一个 commit + 人工验收。
 
-### P0 —— 体感提升最明显（建议先做）
-1. **整轮"过程折叠"**（学 `ProcessFold`）：一轮里的推理 + 工具 + 中间正文，完成后折成一行摘要（如「已运行 3 步 · 12.4 秒」，可展开），**最终答案始终可见**。这是"精致感"的最大来源，且**纯前端**（用现有 `messages[].parts` 就能分组）。
-2. **消息头 + 相对时间**（学 `ChatItem`）：助手消息加头像/名字，右上角相对时间；时间与动作行都 hover 才显（常驻 `opacity:0` 避免抖动）。
-3. **发送"钉顶"滚动**（学 `useConversationScroll` 的 spacer，做简化版）：发消息后把用户消息钉在顶部、助手在下方填充；用户上滑即取消。
-4. **流式文案升级**（学 `ContentLoading`）：把"模型思考中…"换成操作感知文案（"正在思考…" / "正在调用 bash…"）+ 已用秒数。
+### P0 —— 体感提升最明显 ✅ 全部落地（2026-10-10）
+1. ~~**整轮"过程折叠"**~~ ✅ `AssistantProcess`。2. ~~**消息头 + 相对时间**~~ ✅。3. ~~**发送"钉顶"滚动**~~ ✅。4. ~~**流式文案升级**~~ ✅ `StreamingIndicator`。
 
-### P1 —— 结构性、收益大
-5. **消息动作栏改单例 portal + 声明式 slot**（学 `MessageActionProvider`）：一个动作栏移动到 hover 行；把 pi/内置/权限差异做成**配置**而非散落的布尔。
-6. **编辑消息**（modal）+ **编辑最后一条用户消息 = 编辑并重发**（学 `useDoubleClickEdit` / `shouldSendOnConfirm`）。
-7. **草稿持久化 + 输入历史**（↑/↓）：发送前刷新不丢草稿；这是很常见的痛点。
-8. **斜杠命令**（至少 `/compact`、`/new`）与 **`@` 提及**（先做 topics/agents/files 三类即可）。
+### P1 —— 结构性、收益大 ✅ 全部落地（2026-10-10 ~ 10-11）
+5. ~~**消息动作栏改单例 portal + 声明式 slot**~~ ✅ `MessageActionProvider`。6. ~~**编辑消息 + 编辑最后一条用户消息 = 编辑并重发**~~ ✅。7. ~~**草稿持久化 + 输入历史**~~ ✅。8. ~~**斜杠命令 `/compact` `/new`**~~ ✅ + **`@` 提及** ✅（**Agent / 会话**两类；**技能 / 工具 / 文件三类未做**——文件要先给附件建索引，见 HANDOFF §7）。
 
 ### P2 —— 大工程 / 低优先（按需）
 9. 虚拟列表（长会话）；10. 浮动页头 + 话题操作菜单（把改名/删除/导出从侧栏提到页头）；11. 专用错误卡；12. 引用来源卡；13. 历史分页 / 迷你地图 / 滚动位置恢复；14. 多选转发 / 语音。
