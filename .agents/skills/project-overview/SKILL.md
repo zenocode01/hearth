@@ -49,7 +49,7 @@ React UI → features/ 里的 action/service → app/api 路由 → lib/llm prov
   - ✅ **MCP（L2-12）** 与 **Agent Skills**（2026-10-10：外部 MCP server 工具并入 + 本地 SKILL.md 按需加载，`/mcp`、`/skills` 页，见 `skills-and-mcp`）
   - ✅ **L2-15 导出/备份**（2026-10-08：侧栏导出 .md/.json + 附件下载）
   - ✅ **思考等级**（2026-10-09：Agent 级切换 + 能力门 + 工具栏 chip）
-  - 🚧 **聊天体验 LobeHub 化**（2026-10-10 起，**收尾中**）：消息编辑（编辑并重发）/ 斜杠命令 / 输入历史 / 草稿持久化 /「过程」折叠 / 助手消息头 / 钉顶滚动 / 流式指示 / 页头标题 +「⋯」菜单 / 删除确认统一 / **`@` 提及**（2026-10-11：Agent 切换 + 会话引用，见 `chat-streaming` skill 的「输入区能力」）——P0/P1 清单（`docs/analysis/chat-ui-vs-lobehub.md`）已基本做完，剩 P2（虚拟列表 / 错误卡 / 滚动位置恢复…）
+  - 🚧 **聊天体验 LobeHub 化**（2026-10-10 起，**收尾中**）：消息编辑（编辑并重发）/ 斜杠命令 / 输入历史 / 草稿持久化 /「过程」折叠 / 助手消息头 / 钉顶滚动 / 流式指示 / 页头标题 +「⋯」菜单 / 删除确认统一 / **`@` 提及**（2026-10-11：Agent 切换 + 会话引用 + 文件回填，见 `chat-streaming` skill 的「输入区能力」）——P0/P1 清单（`docs/analysis/chat-ui-vs-lobehub.md`）已做完，剩 P2（虚拟列表 / 错误卡 / 滚动位置恢复…）
   - ✅ **修：历史里有工具卡片就发不出去**（2026-10-11：`toModelMessagesWithImages` 逐条转换时只留第一条，丢了工具结果那条 → `Tool result is missing for tool call …`；见 `builtin-tools` skill）
   - ⏭️ 用户明确**跳过 L2-10 图片生成**
 

@@ -44,18 +44,19 @@ description: 'Use for the chat page, streaming replies (Vercel AI SDK streamText
 | 能力 | 触发 | 实现要点 |
 |---|---|---|
 | 斜杠命令 | 输入以 `/` 开头且还没空格 | 行首匹配 `^\/(\w*)$`；`/new`、`/compact` |
-| **`@` 提及** | 光标前有 `@`（`@` 前必须是行首/空白，`@` 到光标之间不能有空白 → 邮箱、`a@b` 不算） | 受控 textarea 拿不到光标，**自己用 `onChange/onClick/onKeyUp/onSelect` 记 `caret`**；候选按类别分组（Agent / 会话），`↑/↓` 选项、`Enter` 选中、`Esc` 关掉（关掉后要 `mentionSuppressed`，否则下一次渲染又弹） |
+| **`@` 提及** | 光标前有 `@`（`@` 前必须是行首/空白，`@` 到光标之间不能有空白 → 邮箱、`a@b` 不算） | 受控 textarea 拿不到光标，**自己用 `onChange/onClick/onKeyUp/onSelect` 记 `caret`**；候选按类别分组（Agent / 会话 / 文件），`↑/↓` 选项、`Enter` 选中、`Esc` 关掉（关掉后要 `mentionSuppressed`，否则下一次渲染又弹） |
 | 输入历史 | 空输入或光标在行首时 `↑` / `↓` | 发送过的输入，浏览位置 `-1` = 不在浏览 |
 | 草稿持久化 | 自动 | 按会话存 `localStorage`（`hearth-draft:<topicId\|new>`），保存 effect 声明在载入 effect **之前**（切会话时不把旧草稿写进新会话） |
 
 文件：`features/chat/mention.ts`（**纯逻辑**：`detectMention` / `applyMention` / `filterMentionGroups` / `extractTopicRefs`）、`features/chat/MentionMenu.tsx`（分组菜单）、`ChatComposer.tsx`（光标跟踪 + 键盘）。
 
-### `@` 提及的两类语义（对标 LobeHub 的 agent / topic mention）
+### `@` 提及的三类语义（对标 LobeHub 的 agent / topic / file mention）
 
 - **Agent 类 = 动作，不插文本**：选中即 `handleAgentChange(agentId)`（PATCH `topics.agentId`，人设立即生效）+ toast。输入框里那段 `@查询词` 会被**抹掉**（`applyMention` 不传 `insert`）。
 - **会话类 = 引用，插文本**：往输入框插 `@<会话标题> `。**引用不在前端存状态**：发送时用 `extractTopicRefs(draft, topics, { excludeTopicId })` 从文本里现认（`@` 必须在行首/空白之后、后面正好跟某个会话标题），作为 `references: [{id, type:'topic'}]` 进请求体。
   - 为什么不存状态：token 就是普通文本，用户会删、切会话时草稿又从 `localStorage` 恢复——存一份引用状态必然和文本对不上（踩过：切走再切回，token 还在但引用失效）。现认之后刷新、切会话、**手打 `@标题`** 三种路径行为一致；代价是两个会话标题一样时会同时引用上。
   - 输入框上方有一条 `referenceHint`（「将引用会话：X、Y」），让"这段 token 现在算不算引用"可见——验收时看它最省事。
+- **文件类 = 动作，不插文本**：选中即 `attachments.addExisting([file])`（**URL 复用、不重传**），候选来自 `GET /api/files`（`lib/files/library.ts` 从消息片段汇总"用过的附件"）——回填路径与消息的"放回输入框"同一条，详见 `attachments-multimodal` skill。
 - 服务端（`lib/llm/references.ts`）：`parseTopicReferences` 校验 → `buildTopicReferences` 读被引用会话最近 20 条（单段 ≤2000 字、合计 ≤6000 字，超了砍头留尾并注明「前文略」）→ 拼成 `用户引用了其他会话的内容…` + `<referenced_topic title="…">` 块。
 - **注入点**：内置模型分支用 `withReferences(context.messages, block)` 拼进**最后一条 user 消息**（`withReferences` 返回新数组，落库的仍是用户原文）；CLI 分支拼在 `question` 前面（pi 的 session 模式同样只发这一轮）。
 - **与附件同一套取舍**：只有**当前轮**把引用内容发给模型，历史里只剩输入框那句 `@标题`；引用块不计入压缩的 token 预算（很小，先不折腾）。

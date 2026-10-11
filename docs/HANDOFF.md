@@ -21,7 +21,7 @@
 ## 2. 现在在哪（进度）
 
 - **阶段 0~4 全部完成**：骨架 + 主题动画 · 流式聊天 · SQLite 持久化 · Agent 管理 · 打磨（三态/启动占位/响应式）
-- **阶段 5 进行中**：✅ **L2-11 工具调用**（内置工具 + 工具卡片 + 开关）；✅ **L2-15 导出/备份**（侧栏导出 .md/.json）；✅ **L2-9 附件**（图片多模态 + 纯文本 + Office/PDF 抽文本）；✅ **MCP（L2-12）+ Agent Skills**（2026-10-10：`/mcp` 配置页 + `/skills` 只读页）；✅ **思考等级切换**（能力门 + 工具栏 chip）；✅ **提问栏对齐**（跨会话 island + 徽章 + 注册表兜底 + "全部同意"位）；🚧 **聊天体验 LobeHub 化**（2026-10-10 起，收尾中：消息编辑 / 斜杠命令 / 输入历史 / 草稿持久化 /「过程」折叠 / 助手消息头 / 钉顶滚动 / 流式指示 / 页头标题 +「⋯」菜单 / 删除确认统一 / **`@` 提及**（2026-10-11：Agent 切换 + 会话引用）；对比清单 `docs/analysis/chat-ui-vs-lobehub.md` 的 P0/P1 已基本做完）；⏭️ 用户明确**跳过 L2-10 图片生成**
+- **阶段 5 进行中**：✅ **L2-11 工具调用**（内置工具 + 工具卡片 + 开关）；✅ **L2-15 导出/备份**（侧栏导出 .md/.json）；✅ **L2-9 附件**（图片多模态 + 纯文本 + Office/PDF 抽文本）；✅ **MCP（L2-12）+ Agent Skills**（2026-10-10：`/mcp` 配置页 + `/skills` 只读页）；✅ **思考等级切换**（能力门 + 工具栏 chip）；✅ **提问栏对齐**（跨会话 island + 徽章 + 注册表兜底 + "全部同意"位）；🚧 **聊天体验 LobeHub 化**（2026-10-10 起，收尾中：消息编辑 / 斜杠命令 / 输入历史 / 草稿持久化 /「过程」折叠 / 助手消息头 / 钉顶滚动 / 流式指示 / 页头标题 +「⋯」菜单 / 删除确认统一 / **`@` 提及**（2026-10-11：Agent 切换 + 会话引用 + 文件回填）；对比清单 `docs/analysis/chat-ui-vs-lobehub.md` 的 P0/P1 已做完）；⏭️ 用户明确**跳过 L2-10 图片生成**
 - **额外（超出原路线图）**：**外部 CLI Agent** 深度集成（pi / opencode / claude）：描述符目录 + 安装检测、CLI 输出统一 AgentEvent + 薄 adapter；尤其是 **pi**：
   RPC 模式、思考流、工具卡片 + 开关、todo 清单、question 对话、**上下文压缩**（会话太长把旧历史压成滚动摘要，
   内置模型与 CLI 都走我们的压缩，工具栏 chip 可看占用/手动压/撤销）、**会话树与分支**（topic ↔ pi session，历史交给 pi，按分支渲染对话，生命周期对齐）
@@ -51,7 +51,7 @@
 | 外部 CLI 描述符目录 + AgentEvent | `7ab14f0` `b0811c1` `40b69a1` | 学 LobeHub 异构接入：pi / opencode / claude 描述符目录 + 安装检测（`lib/llm/heteroAgents.ts` / `cliDetect.ts`）；所有外部 CLI 输出统一 AgentEvent + 薄 adapter（`lib/llm/agentEvents.ts` / `adapters.ts`） |
 | pi 会话树与分支（S3~S6） | `d8cc6ce` `d4a0d00` `67f6c39` `34fd3d1` `5577a54` `0beb51e` | 持久化：topic ↔ pi session，历史交给 pi（重载从 pi 拉）→ S3：会话树面板 + 同 topic 内分支（会话客户端 + `navigateTree` 扩展 + 树/导航接口）→ S4：pi 主题按当前分支渲染对话 → S5：上下文用量改用 `get_session_stats` → S6：会话生命周期对齐 |
 | 聊天体验 LobeHub 化（进行中） | `6090da6` `ea8b1d7` `77ca7a3` `b402ea4` `589b10d` `483d556` `05a2874` `ca5ca27` … `7a07753` | 一轮"过程"折叠 · 发送后钉顶滚动 · 助手消息头（头像 + 名字 + 相对时间）· 流式指示（转圈 + 操作感知文案 + 已用秒数）· 草稿持久化 · 输入历史 ↑/↓ · 斜杠命令 `/new` `/compact` · 消息动作栏单例 portal · 编辑消息（编辑并重发）· 页头标题 +「⋯」菜单 · 删除确认统一（自绘遮罩弹层）· a11y aria-label |
-| `@` 提及（P1 收尾，2026-10-11） | 见本轮 commit | 输入框 `@` 唤起分组菜单：**Agent 类 = 切换到该人设**（动作，不插文本）；**会话类 = 引用该会话**（插 `@标题` token，发送时把它的最近内容作为 `<referenced_topic>` 参考块发给模型，只发当前轮）。纯逻辑 `features/chat/mention.ts` + 菜单 `MentionMenu.tsx` + 服务端 `lib/llm/references.ts`；光标自己跟踪（受控 textarea 拿不到）。**顺带修了一个真 bug**：`toModelMessagesWithImages` 逐条转模型消息时只取第一条，把工具结果那条丢了 → **历史里有工具卡片的会话，之后每条消息都发不出去**（`Tool result is missing for tool call …`），改为整组保留 |
+| `@` 提及（P1 收尾，2026-10-11） | `72f4cf6` + 本轮 | 输入框 `@` 唤起分组菜单：**Agent 类 = 切换到该人设**（动作，不插文本）；**会话类 = 引用该会话**（插 `@标题` token，发送时把它的最近内容作为 `<referenced_topic>` 参考块发给模型，只发当前轮）；**文件类 = 把用过的附件放回输入框**（URL 复用不重传，候选由 `lib/files/library.ts` 从消息片段汇总、`GET /api/files` 给）。纯逻辑 `features/chat/mention.ts` + 菜单 `MentionMenu.tsx` + 服务端 `lib/llm/references.ts`；光标自己跟踪（受控 textarea 拿不到）。**顺带修了一个真 bug**：`toModelMessagesWithImages` 逐条转模型消息时只取第一条，把工具结果那条丢了 → **历史里有工具卡片的会话，之后每条消息都发不出去**（`Tool result is missing for tool call …`），改为整组保留 |
 
 ## 4. 关键文件地图（本轮重点）
 
@@ -78,7 +78,8 @@
 | `lib/db/mcpServers.ts` | MCP server 配置读写（`mcp_servers` 表，迁移 0010） |
 | `lib/tools/settings.ts` | 工具开关纯逻辑（**不 import `ai`**，客户端可用） |
 | `lib/db/messageParts.ts` | 消息片段与 AI SDK 的双向映射（刻意解耦，SDK 升级不污染历史；含 file 附件片段） |
-| `lib/files/constants.ts` | 附件类型白名单/体积上限/`accept`（**纯常量，客户端可 import**） |
+| `lib/files/constants.ts` | 附件类型白名单/体积上限/`accept`/`formatBytes`/`fileKindLabel`（**纯常量，客户端可 import**） |
+| `lib/files/library.ts` | 「用过的附件」清单：从 `messages.parts` 的 file 片段汇总（同 url 去重 + 现 `stat` 体积），供 `@文件` 与 `GET /api/files` |
 | `lib/files/uploads.ts` | 附件落盘：校验 → sha1 命名 → 写 `public/uploads`；读回字节/base64（**仅服务端**） |
 | `lib/llm/attachments.ts` | UI file 片段 → 模型 `file` part（内置模型）/ base64 图片（pi）；只发当前轮图片 |
 | `app/api/files/route.ts` | POST 上传附件（图片） |
@@ -124,10 +125,11 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
 
 ## 7. 已知问题 / 未完成
 
-- **`@` 提及（2026-10-11）**：做了 **Agent**（选中即切换本会话人设）与 **会话**（引用其最近内容）两类；对比文档里提的第三类**「文件」没做**（uploads 落盘名是 sha1，没有原始文件名可展示；要做得先给附件建索引/把 `filename` 收进库）。另：
+- **`@` 提及（2026-10-11）**：三类都做了——**Agent**（选中即切换本会话人设）、**会话**（引用其最近内容）、**文件**（把用过的附件放回输入框，URL 复用不重传；候选由 `lib/files/library.ts` 从消息片段汇总，`GET /api/files`）。另：
   - 引用**只对当前轮有效**（与附件同一取舍）——过了一轮想让模型再读那个会话，得重新 `@` 一次；
   - 引用是**发送时从文本里现认**的（`extractTopicRefs`，不存状态）——所以手打 `@标题` 一样生效；代价是**两个会话标题相同会同时引用上**，标题改了旧 token 就作废；
-  - 引用块的字符预算（单段 2000 / 合计 6000）**不计入压缩阈值**，超长会话可能再多一点点。
+  - 引用块的字符预算（单段 2000 / 合计 6000）**不计入压缩阈值**，超长会话可能再多一点点；
+  - 文件清单是**扫 `messages.parts` 汇总**的（只认历史里用过的附件，限最近 300 条消息）：上传了但没发出去的文件不在里面，`public/uploads` 里的孤儿文件也不会冒出来（同内容 sha1 去重）。
 - **L2-10 图片生成**：用户明确跳过（`image-generation` skill 还在，别当成待办）。
 - **提问栏对齐已做**（2026-10-08，`12ec940`）：多 pending tab（防备位）+ 跨会话 island/徽章 + 注册表兜底重建 + "全部同意"按钮位。**剩余**：
   - "全部同意"只在全部 `method === 'confirm'` 时出现，而 question 工具走 `select` → **该路径没实测过**（需要一个会发 confirm 对话的场景）；
@@ -150,9 +152,9 @@ npm run --silent typecheck   # 类型检查（--silent 可去掉 npm 的 stderr 
 ## 8. 下一步建议（挑一个）
 
 1. **个人记忆（L2-13）**：`user_memory` 表 + "我的记忆"页 + 对话前拼进提示词。
-2. **`@` 提及收尾**：附件索引（原始文件名入库）→ 补上「文件」类提及；引用改成本轮之外也能续（跟着消息落进 parts）。
-3. **附件收尾**：扫描版 PDF 走 OCR（要装外部工具）、`public/uploads` 的清理策略（删会话时删文件？）、旧版 Office 若真要支持得装 LibreOffice。
-4. **断流重连**（根治"刷新页面会杀挂起的 pi"，见 §7；设计上大改）。
-5. **i18n（L2-8）**：中英双语（可选，按需）。
+2. **附件收尾**：扫描版 PDF 走 OCR（要装外部工具）、`public/uploads` 的清理策略（删会话时删文件？——现在有了 `listKnownFiles`，"哪些文件还被引用"能查了）、旧版 Office 若真要支持得装 LibreOffice。
+3. **断流重连**（根治"刷新页面会杀挂起的 pi"，见 §7；设计上大改）。
+4. **i18n（L2-8）**：中英双语（可选，按需）。
+5. **`@` 提及可再扩**：技能/工具两类候选（LobeHub 有）；会话引用改成"跟着消息落进 parts"，让它跨轮仍有效。
 
 > 工作节奏见 `vibe-coding-discipline` skill：**小步**（一次一个小功能）、随时能跑、验收后立刻 commit、约定变了先改 AGENTS.md/skill。

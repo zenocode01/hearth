@@ -30,6 +30,7 @@ description: 'Use for SQLite + Drizzle setup, topics/messages schema, session CR
 - **建会话与发消息的竞态**：新建会话时若先 `setActiveTopicId`，历史加载 effect 会把刚发出的消息清空。用 `skipHistoryForRef` 跳过这一次历史加载。
 - **推理过程也要入库**（否则刷新后思考内容消失，与 LobeHub 不一致）：`messages` 表有 `reasoning`（文本）与 `reasoning_ms`（耗时）。写入点在 `toUIMessageStream({ onEnd: ({ responseMessage }) => ... })` —— 只有这里能拿到**组装好的 `responseMessage.parts`**（含 `text` 与 `reasoning` 两类 part）；`streamText.onEnd` 只有正文文本。历史消息在 `ChatView` 里还原为 `[reasoning part, text part]`，耗时经 `message.metadata.reasoningMs` 传给 `ReasoningBlock` 的 `durationMs`。
 - **新迁移要重启 dev**：`migrate()` 只在建立新连接时执行，而 dev 进程把连接缓存在 `globalThis`；加列后不重启会出现 `no such column`。重启即自动补跑迁移。
+- **`schema` 的 `Date` 到浏览器就变成字符串了**（类型在骗人）：Drizzle 的 `integer(..., { mode: 'timestamp_ms' })` 在服务端读出来是 `Date`，但经过 `Response.json()` 就是 ISO 字符串，而 `Topic['updatedAt']` 的类型仍写着 `Date`。所以**客户端**代码里 `topic.updatedAt.getTime()` 直接炸 `TypeError: … is not a function`（历史教训：侧栏"按最近活动排序"第一次就这么崩了——之前没有客户端代码碰过时间戳，这个不一致一直藏着）。解法：客户端一律用 `toTime()`（`lib/db/time.ts`，兼容 Date / 毫秒 / ISO 串 / null）；服务端同进程拿 DB 结果可以继续直接用 Date。写新的"按时间排序/分组"时先想一下这一条。
 
 ## 消息操作（复制 / 放回输入框 / 重新生成 / 删除）
 

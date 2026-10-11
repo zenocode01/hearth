@@ -22,6 +22,16 @@ Hearth 的附件链路（2026-10-08 起，A 期=图片，B 期=文本，C 期=Of
   → 渲染：MessageItem 里 AttachmentPreview（缩略图 + 自写灯箱）
 ```
 
+## 「用过的附件」清单（`@文件` 提及，2026-10-11）
+
+`@` 菜单里的「文件」类候选来自 `lib/files/library.ts` 的 `listKnownFiles()`：**从 `messages.parts` 的 file 片段汇总**，同 url 去重（保留最近一次的名字）、最近用过的排前面，体积现 `stat` 落盘文件。
+
+- **不建 attachments 表**：附件的事实来源本来就是消息片段；再存一张表就要处理"传到一半没发出去"的孤儿行和旧数据回填，多一处能跟事实对不上的地方。
+- 扫描成本用 `WHERE parts LIKE '%"file"%'` 挡在 SQL 层（只解析可能带附件的行），再限 `SCAN_MESSAGES = 300` 条。个人库够用；真到几万条再说。
+- 接口：`GET /api/files` → `{ files: [{ filename, mediaType, size?, url }] }`（和上传的 `POST` 同一个 route）。
+- 客户端：选中候选 = `attachments.addExisting([file])`（**URL 复用、不重传**，与消息的"放回输入框"同一条路），不插文本；`index.tsx` 在启动时拉一次、发送带附件的消息后再拉一次。
+- 展示：`fileKindLabel()`（`lib/files/constants.ts`，图片/PDF/表格/文档/文本/文件 + 体积），顺手把 `formatBytes` 抽出来给 `AttachmentPreview` 共用。
+
 ## 必须知道的六个坑
 
 1. **服务端代码不能被客户端 import**：`lib/files/uploads.ts` 带 `node:fs`/`node:crypto`，
