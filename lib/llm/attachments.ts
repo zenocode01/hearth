@@ -167,13 +167,18 @@ export async function toModelMessagesWithImages(
     // **一律**先把 file 片段摘掉再交给 SDK：convertToModelMessages 会对 file part 做
     // `new URL(part.url)`，我们的 `/uploads/…` 是相对路径 → Invalid URL（必须摘，不能留）
     const parts = message.parts.filter((part) => part.type !== 'file');
-    const [converted] = await convertToModelMessages([{ ...message, parts } as UIMessage]);
+    const convertedList = await convertToModelMessages([{ ...message, parts } as UIMessage]);
 
-    if (!converted) continue;
+    if (convertedList.length === 0) continue;
+    // 一条 UI 消息可能转成**多条**模型消息：带工具调用的助手消息会产出
+    // `assistant`（内含 tool-call）+ `tool`（内含 tool-result）两条。
+    // 必须整组保留——只留第一条会让 tool-call 找不到结果，
+    // 下一轮请求直接抛 `Tool result is missing for tool call …`（历史里有工具卡片就必挂）。
     if (!isLastUser) {
-      out.push(converted);
+      out.push(...convertedList);
       continue;
     }
+    const [converted, ...rest] = convertedList;
 
     // 文本类附件 → `<file name>` 文本块拼在最后一条 user 消息里（图片之前）
     const textBlocks = await currentTurnTextBlocks(messages);
@@ -207,7 +212,7 @@ export async function toModelMessagesWithImages(
     ];
     // 既没文本也没图片（理论上不会发生）就别造空消息
     if (content.length === 0) continue;
-    out.push({ ...converted, content } as ModelMessage);
+    out.push({ ...converted, content } as ModelMessage, ...rest);
   }
 
   return out;

@@ -114,6 +114,7 @@ pi 的事件流里有完整的工具协议（**实测**，`pi -p --mode json` �
 - **不要把 AI SDK 的 part 原样入库**：SDK 升级会改结构。存**自己的紧凑片段**（`{type:'text'|'reasoning'|'tool', …}`），回读时再还原成 `tool-<name>`。
 - **`messages.parts` 取代"从 content+reasoning 拼"**：老数据没有该列 → 历史加载回落到 content + reasoning（不能直接当空处理）。
 - **坑：`convertToModelMessages` 会对每条消息读 `message.parts.some(...)`** —— 任何一条没有 `parts` 字段的消息都会 500（`Cannot read properties of undefined (reading 'some')`）。上行历史必须条条带 `parts`。
+- **坑（2026-10-11 修）：一条 UI 消息可能转成多条模型消息**。带工具调用的助手消息会产出**两条**——`assistant`（内含 `tool-call`）+ `tool`（内含 `tool-result`）。`toModelMessagesWithImages` 为处理附件改成"逐条转换"时写的是 `const [converted] = …`，**只留了第一条、把结果那条丢了**；于是历史里的工具调用永远没有结果，下一轮请求在 provider 层直接抛 `Tool result is missing for tool call …`（表现：某个会话调过一次工具后，之后这个会话**每条消息都发不出去**；错误文案借 `humanizeError` 兜底显示成"请求失败：Tool result is missing…"）。修法：整组保留 `out.push(...convertedList)`，只有"最后一条 user 消息要补附件文本/图片"时才取首条改造、其余原样带上。验法：库里放一条含 `{type:'tool', state:'output-available'}` 的历史消息 → 再发一条 → 不报错即过。
 - **坑：`humanizeError` 别用裸 `fetch` 当网络关键词**：工具报错消息里会列出可用工具（含 `fetch_url`），一匹配就误报成"无法连接模型服务"。要先用 `NoSuchToolError.isInstance` / `InvalidToolInputError.isInstance` 分类，网络判断只留 `fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|socket hang up` 这类具体模式。
 - **弱模型会幻觉工具名**：qwen 偶尔先调 `<名字>_function`（provider 风格的误写），SDK 报"不存在的工具" → UI 显示一张**失败卡片**，模型随即自己改用正确工具重试（同一轮里两张卡片）。属正常现象，不用拦。
 - **坑：改了 schema 必须重启 dev**：DB 连接缓存在 `globalThis`（迁移只在打开连接时跑），不重启就报 `no such column`。
