@@ -309,9 +309,20 @@ export function useAttachments() {
   const addExisting = useCallback((incoming: Array<{ filename: string; mediaType: string; size?: number; url: string }>) => {
     if (incoming.length === 0) return;
     setItems((prev) => {
+      // 同一个 url 只留一份（入参内部也可能重复）；顺带卡住「一次最多 N 个」——
+      // `@文件` 能连点很多次，这条路径以前不校验，用户能加出一堆附件直到被服务端拒
+      const seen = new Set(prev.map((old) => old.url).filter(Boolean));
+      const fresh = incoming.filter((item) => {
+        if (seen.has(item.url)) return false;
+        seen.add(item.url);
+        return true;
+      });
+      if (prev.length + fresh.length > MAX_FILES_PER_MESSAGE) {
+        setError(`一次最多 ${MAX_FILES_PER_MESSAGE} 个附件`);
+        return prev;
+      }
       const merged = [...prev];
-      for (const item of incoming) {
-        if (merged.some((old) => old.url === item.url)) continue;
+      for (const item of fresh) {
         seqRef.current += 1;
         merged.push({
           filename: item.filename,

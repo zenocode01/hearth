@@ -322,7 +322,7 @@ export const ChatComposer = memo(
             placeholder={
               disabled
                 ? '请先回答上面的问题…'
-                : '输入消息，Enter 发送，Shift+Enter 换行（@ 提及会话 / Agent，/ 命令）'
+                : '输入消息，Enter 发送，Shift+Enter 换行（@ 提及会话 / Agent / 文件，/ 命令）'
             }
             value={value}
             onChange={(event) => {

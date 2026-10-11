@@ -1,4 +1,13 @@
+import { listKnownFiles } from '@/lib/files/library';
 import { saveUpload, UploadError } from '@/lib/files/uploads';
+
+/**
+ * GET /api/files —— 用过的附件清单（`@文件` 提及的候选）。
+ * → { files: [{ filename, mediaType, size?, url }] }
+ */
+export async function GET() {
+  return Response.json({ files: listKnownFiles() });
+}
 
 /**
  * POST /api/files —— 上传附件（图片）。

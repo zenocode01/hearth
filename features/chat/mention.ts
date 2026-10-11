@@ -8,14 +8,16 @@ import type { ReactNode } from 'react';
 export interface MentionItem {
   /** 同一条数据的说明（副标题，如 Agent 的模型） */
   description?: string;
+  /** 文件类候选带上的附件信息（选中 = 直接加进输入框附件，不插文本） */
+  file?: { filename: string; mediaType: string; size?: number; url: string };
   icon?: ReactNode;
-  /** 数据本身的 id（Agent id / 会话 id）——选中后要用它做动作 */
+  /** 数据本身的 id（Agent id / 会话 id / 附件 url）——选中后要用它做动作 */
   id: string;
   /** React 列表 key（`<类型>-<id>`，两类数据可能撞 id） */
   key: string;
-  /** 插入到输入框的文本（如 `@周五的会议`）；缺省 = 只做动作不插文本（如切换 Agent） */
+  /** 插入到输入框的文本（如 `@周五的会议`）；缺省 = 只做动作不插文本（如切换 Agent / 加附件） */
   insert?: string;
-  kind: 'agent' | 'topic';
+  kind: 'agent' | 'file' | 'topic';
   label: string;
 }
 

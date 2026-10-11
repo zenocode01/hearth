@@ -5,7 +5,14 @@ import { Button, Flexbox, Icon, Text, copyToClipboard } from '@lobehub/ui';
 import { toast } from '@lobehub/ui/base-ui';
 import { isToolUIPart, type UIMessage } from 'ai';
 import { Dropdown } from 'antd';
-import { MoreHorizontal, MessageSquareText, PanelLeft, Paperclip } from 'lucide-react';
+import {
+  FileText,
+  Image as ImageIcon,
+  MessageSquareText,
+  MoreHorizontal,
+  PanelLeft,
+  Paperclip,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -15,7 +22,7 @@ import { usePromptDialog } from '@/components/promptDialog';
 import { useIsMobile } from '@/components/useMediaQuery';
 import { parseStoredParts, deserializeParts } from '@/lib/db/messageParts';
 import type { Agent, ChatMessage, Topic } from '@/lib/db/schema';
-import { FILE_ACCEPT } from '@/lib/files/constants';
+import { FILE_ACCEPT, fileKindLabel } from '@/lib/files/constants';
 import { exportFilename } from '@/lib/export/topicExport';
 import { isPiCommand, isPiRpcCommand } from '@/lib/llm/piCommand';
 import { parseToolSettings, type ToolSetting } from '@/lib/tools/settings';
@@ -115,6 +122,10 @@ export function ChatView() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   /** 待发送附件（已上传到 /uploads，随消息一起发） */
   const attachments = useAttachments();
+  /** 用过的附件清单（`@文件` 提及的候选；服务端从消息片段里汇总） */
+  const [libraryFiles, setLibraryFiles] = useState<
+    { filename: string; mediaType: string; size?: number; url: string }[]
+  >([]);
 
   /**
    * 拉会话列表。**默认静默**：发送消息 / 改名 / 删除之后的刷新不闪骨架屏；
@@ -141,6 +152,19 @@ export function ChatView() {
       setAgents(data.agents ?? []);
     } catch {
       /* 忽略 */
+    }
+  }, []);
+
+  /** 拉"用过的附件"清单（`@文件` 用；发送带附件的消息后再拉一次，让刚发的文件进来） */
+  const refreshFiles = useCallback(async () => {
+    try {
+      const res = await fetch('/api/files');
+      const data = (await res.json()) as {
+        files?: { filename: string; mediaType: string; size?: number; url: string }[];
+      };
+      setLibraryFiles(data.files ?? []);
+    } catch {
+      /* 忽略：拉不到就是没有文件类候选 */
     }
   }, []);
 
@@ -244,17 +268,18 @@ export function ChatView() {
     );
   }, []);
 
-  // 启动：拉会话列表 + Agent 列表 + 从 URL 恢复当前会话（刷新后仍停在同一个会话）
+  // 启动：拉会话列表 + Agent 列表 + 附件清单 + 从 URL 恢复当前会话（刷新后仍停在同一个会话）
   useEffect(() => {
     void refreshTopics({ silent: false });
     void refreshAgents();
+    void refreshFiles();
     // 空闲时预取「管理 Agent」页（参考 refs 的意图预取：点过去更快）
     router.prefetch('/agents');
     router.prefetch('/skills');
     router.prefetch('/mcp');
     const id = new URLSearchParams(window.location.search).get('topic');
     if (id) setActiveTopicId(id);
-  }, [refreshAgents, refreshTopics, router]);
+  }, [refreshAgents, refreshFiles, refreshTopics, router]);
 
   // 当前会话使用哪个 Agent / 哪些工具（由会话记录决定；新建会话时用选择器里的值）
   useEffect(() => {
@@ -317,9 +342,10 @@ export function ChatView() {
   );
 
   /**
-   * `@` 提及候选（先做两类，对标 LobeHub 的 MentionMenu）：
+   * `@` 提及候选（对标 LobeHub 的 MentionMenu）：
    * - Agent：选中 = 把本会话交给它回答（走 handleAgentChange，人设立即生效）
    * - 会话：选中 = 往输入框插 `@标题`，发送时把那个会话最近的内容作为引用发给模型
+   * - 文件：选中 = 直接把那个附件放回输入框（URL 复用、不重传；图片走多模态、文本/文档抽成 `<file>` 块）
    */
   const mentionCategories = useMemo<MentionCategory[]>(() => {
     const categories: MentionCategory[] = [];
@@ -361,17 +387,39 @@ export function ChatView() {
         label: '会话',
       });
     }
+    if (libraryFiles.length > 0) {
+      categories.push({
+        hint: '作为附件再发一次（不重传）',
+        items: libraryFiles.map((file) => ({
+          description: fileKindLabel(file),
+          file: { filename: file.filename, mediaType: file.mediaType, size: file.size, url: file.url },
+          icon: <Icon icon={file.mediaType.startsWith('image/') ? ImageIcon : FileText} size={16} />,
+          id: file.url,
+          key: `file-${file.url}`,
+          kind: 'file',
+          label: file.filename,
+        })),
+        key: 'file',
+        label: '文件',
+      });
+    }
     return categories;
-  }, [activeAgentId, activeTopicId, agents, topics]);
+  }, [activeAgentId, activeTopicId, agents, libraryFiles, topics]);
 
   const handleMentionSelect = useCallback(
     (item: MentionItem) => {
       // 会话类不用做事：`@标题` 已经插进文本，发送时现认（见 mention.ts 的 extractTopicRefs）
-      if (item.kind !== 'agent') return;
+      if (item.kind === 'topic') return;
+      if (item.kind === 'file') {
+        if (!item.file) return;
+        attachments.addExisting([item.file]);
+        toast.success(`已加入附件：${item.file.filename}`);
+        return;
+      }
       void handleAgentChange(item.id);
       toast.success(`已切换到「${item.label}」，本会话由它回答`);
     },
-    [handleAgentChange],
+    [attachments, handleAgentChange],
   );
 
   /** 草稿里现认的会话引用（跟着文本走：删掉 token 就没了，切会话/刷新也一致） */
@@ -525,6 +573,8 @@ export function ChatView() {
         url: item.url as string,
       }));
     attachments.clear();
+    // 这次发出去的附件会进"用过的附件"清单（`@文件` 提及的候选）
+    if (files.length > 0) void refreshFiles();
     // `@` 引用的会话：直接从文本里认（token 被删掉 = 引用作废）
     const references = activeTopicRefs.map((ref) => ({ id: ref.id, type: 'topic' }));
     void sendMessage(
@@ -549,6 +599,7 @@ export function ChatView() {
     sendMessage,
     toolSettings,
     activeTopicRefs,
+    refreshFiles,
   ]);
 
   /** 消息操作：复制 / 放回输入框 / 重新生成 / 删除。 */

@@ -3,6 +3,8 @@
 import { AlertTriangle, Loader2, RotateCw, X } from 'lucide-react';
 import { memo, useState } from 'react';
 
+import { formatBytes } from '@/lib/files/constants';
+
 /** 预览条目：输入框里的（有 status/progress）与消息里的（只读）都能用 */
 export interface PreviewItem {
   error?: string;
@@ -25,13 +27,6 @@ interface AttachmentPreviewProps {
   items: PreviewItem[];
   /** 缩略图边长 */
   size?: number;
-}
-
-function formatSize(bytes: number): string {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
 
 /**
@@ -115,7 +110,7 @@ export const AttachmentPreview = memo(
                       }}
                     >
                       <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                      {formatSize(item.size ?? 0)} · {item.progress ?? 0}%
+                      {[formatBytes(item.size), `${item.progress ?? 0}%`].filter(Boolean).join(' · ')}
                     </div>
                   )}
                   {failed && (
@@ -142,7 +137,7 @@ export const AttachmentPreview = memo(
                 {/* 体积/状态说明：图片缩略图本身已经很明显了，只给非图片显示文件名与体积 */}
                 {!isImage && (
                   <span style={{ fontSize: 10.5, opacity: 0.6 }}>
-                    {failed ? '上传失败' : formatSize(item.size ?? 0)}
+                    {failed ? '上传失败' : formatBytes(item.size)}
                   </span>
                 )}
                 {failed && item.error && (

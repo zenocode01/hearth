@@ -163,3 +163,33 @@ export function isLegacyOffice(input: { filename?: string; mediaType: string }):
   const ext = extOf(input.filename ?? '');
   return LEGACY_OFFICE_EXTENSIONS.includes(ext);
 }
+
+/** 人类可读的体积（0/取不到 → 空串，调用方据此决定要不要显示） */
+export function formatBytes(bytes?: number): string {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+/** 附件类别 + 体积（`@文件` 菜单的副标题）：图片 / PDF / 表格 / 文档 / 文本 / 文件 */
+export function fileKindLabel(input: {
+  filename?: string;
+  mediaType: string;
+  size?: number;
+}): string {
+  const ext = extOf(input.filename ?? '');
+  const kind = input.mediaType.startsWith('image/')
+    ? '图片'
+    : ext === 'pdf'
+      ? 'PDF'
+      : ext === 'xlsx'
+        ? '表格'
+        : ext === 'docx' || ext === 'pptx'
+          ? '文档'
+          : isTextFile(input)
+            ? '文本'
+            : '文件';
+  const size = formatBytes(input.size);
+  return size ? `${kind} · ${size}` : kind;
+}
